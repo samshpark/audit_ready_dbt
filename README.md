@@ -13,7 +13,7 @@ This project demonstrates an end-to-end data pipeline built with a **CPA's persp
 
 ---
 
-## 2. Data Architecture
+## 2. Hybrid Data Architecture
 ![Architecture Diagram](https://github.com/your-username/your-repo/raw/main/images/architecture.png)
 
 1.  **Source:** BigQuery Public Dataset (`thelook_ecommerce`).
