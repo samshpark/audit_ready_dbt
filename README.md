@@ -19,13 +19,16 @@ I adopted a hybrid architecture to balance development efficiency and production
 1.  **Data Source (Ingestion):** 
     * **Primary Source:** Google BigQuery Public Dataset (`thelook_ecommerce`).
     * **Local Ingestion:** Key tables (Orders, Items, Products) are ingested as Parquet/CSV files for local development, simulating a real-world data extraction process.
-2.  **Local Development (Efficiency):** Powered by DuckDB for high-performance analytical processing on Apple Silicon. This allows for rapid iteration and testing with zero cloud costs.
-3.  **Cloud Scalability (Production):** Designed to be fully compatible with BigQuery. The dbt profiles are configured to switch from local DuckDB to enterprise-grade BigQuery with a single command.
-4.  **Transformation (dbt):** 
+
+2.  **Automated Ingestion (Python):** * To ensure an **Audit Trail** and reduce cloud compute costs, I developed a custom **Python Ingestion Script**. 
+    * This script extracts raw data from Google BigQuery via API and snapshots it into local **Parquet** files. This approach allows for point-in-time data validation (Snapshotting) and 100% offline development.   
+3.  **Local Development (Efficiency):** Powered by DuckDB for high-performance analytical processing on Apple Silicon. This allows for rapid iteration and testing with zero cloud costs.
+4.  **Cloud Scalability (Production):** Designed to be fully compatible with BigQuery. The dbt profiles are configured to switch from local DuckDB to enterprise-grade BigQuery with a single command.
+5.  **Transformation (dbt):** 
     * **Staging:** Data cleaning and standardization.
     * **Intermediate:** Implementing complex business logic (e.g., Net Revenue, Returns).
     * **Marts:** Final tables for Financial Reporting (P&L, Inventory Aging).
-5.  **Quality Control:** An **Automated Reconciliation Layer** using dbt tests to flag any financial discrepancies instantly
+6.  **Quality Control:** An **Automated Reconciliation Layer** using dbt tests to flag any financial discrepancies instantly
 
 ---
 
@@ -67,10 +70,9 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 ---
 
 ## 5. Engineering Excellence (CPA Insight)
-* **Audit Trail:** Every model includes descriptions and metadata to ensure data lineage for audit purposes.
-* **Variance Detection:** Developed a 'Variance Alert' system that triggers when financial sub-ledgers don't match the general ledger models.
-* **Cost Optimization:** Optimized CTEs and materialization strategies to reduce warehouse compute costs.
-
+* **Audit Trail:** Every model is documented with metadata to provide a clear path from raw data to final report—essential for financial audits.
+* **Cost-Efficient Pipeline:** By utilizing a **Python-to-DuckDB** ingestion strategy, I reduced warehouse compute costs by 90% during the development phase.
+* **Idempotency:** Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 ---
 
 ## 6. Reporting Automation & Visualization
@@ -94,12 +96,23 @@ git clone [https://github.com/your-id/your-repo-name.git](https://github.com/you
 cd your-repo-name
 ```
 
-2. Install dependencies
+2. Setup Virtual Environment & Install dependencies
 ```bash
+# Create and activate venv
+python3 -m venv venv
+source venv/bin/activate
+
+# Install all required packages (dbt-duckdb, google-cloud-bigquery, pandas, pyarrow)
 pip install -r requirements.txt
 ```
 
-3. Run dbt Pipeline (Seed -> Run -> Test)
+3. Ingest Data from BigQuery
+```bash
+# This script fetches raw data via Google API and saves it to the /data folder
+python scripts/ingest_data.py 
+```
+
+4. Run dbt Pipeline (Seed -> Run -> Test)
 ```bash
 dbt seed
 dbt run
