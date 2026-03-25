@@ -14,25 +14,30 @@ This project demonstrates an end-to-end data pipeline built with a **CPA's persp
 ---
 
 ## 2. Hybrid Data Architecture
-![Architecture Diagram](https://github.com/your-username/your-repo/raw/main/images/architecture.png)
+I adopted a hybrid architecture to balance development efficiency and production scalability.
 
-1.  **Source:** BigQuery Public Dataset (`thelook_ecommerce`).
-2.  **Storage & Compute:** **DuckDB** for high-performance local analytical processing (optimized for Apple Silicon).
-3.  **Transformation (dbt):** * **Staging:** Data cleaning and standardization.
+1.  **Data Source (Ingestion):** 
+    * **Primary Source:** Google BigQuery Public Dataset (`thelook_ecommerce`).
+    * **Local Ingestion:** Key tables (Orders, Items, Products) are ingested as Parquet/CSV files for local development, simulating a real-world data extraction process.
+2.  **Local Development (Efficiency):** Powered by DuckDB for high-performance analytical processing on Apple Silicon. This allows for rapid iteration and testing with zero cloud costs.
+3.  **Cloud Scalability (Production):** Designed to be fully compatible with BigQuery. The dbt profiles are configured to switch from local DuckDB to enterprise-grade BigQuery with a single command.
+4.  **Transformation (dbt):** 
+    * **Staging:** Data cleaning and standardization.
     * **Intermediate:** Implementing complex business logic (e.g., Net Revenue, Returns).
     * **Marts:** Final tables for Financial Reporting (P&L, Inventory Aging).
-4.  **Quality Control:** **Automated Reconciliation Layer** using dbt tests.
+5.  **Quality Control:** An **Automated Reconciliation Layer** using dbt tests to flag any financial discrepancies instantly
 
 ---
 
 ## 3. Tech Stack
-| Category | Tools |
-| :--- | :--- |
-| **Languages** | SQL (BigQuery/DuckDB Dialect), Python |
-| **Data Engine** | DuckDB, BigQuery |
-| **Transformation** | dbt-core (v1.8+) |
-| **Quality/Testing** | dbt-tests, Great Expectations |
-| **Ops/Env** | Docker, Git |
+| Category | Tools | Rationale |
+| :--- | :--- | :--- |
+| **Languages** | SQL (BigQuery/DuckDB), Python | Core languages for data modeling and custom scripting |
+| **Data Engine** | DuckDB (Local), BigQuery (Cloud) | Optimized for cost-effective development and scalable production |
+| **Transformation** | dbt-core (v1.8+) | Industry standard for modular, version-controlled SQL modeling |
+| **Orchestration** | GitHub Actions, Dagster/Airflow | Automating pipeline execution and ensuring reliable workflow delivery |
+| **Quality/Testing** | dbt-tests, Great Expectations | Automated data quality checks and rigorous financial validation |
+| **Ops/Env** | Docker, Git, Python venv | Ensuring a reproducible, containerized, and isolated dev environment |
 
 ---
 
