@@ -1,0 +1,114 @@
+version: 2
+
+sources:
+  - name: thelook_ecommerce
+    description: "E-commerce dataset extracted from BigQuery and stored as local Parquet files."
+    loader: python_script
+    
+    # meta: external_location allows DuckDB to map dbt source names 
+    # directly to the local file path. {name} maps to the table name below.
+    meta:
+      external_location: "data/{name}.parquet"
+
+    tables:
+      - name: raw_orders
+        description: "Primary table for order headers and status."
+        columns:
+          - name: order_id
+            description: "Primary key for orders"
+            tests:
+              - unique # test unique value for the primary key
+              - not_null # test null value for the primary key
+          - name: user_id
+            description: "Foreign key to the user table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('thelook_ecommerce', 'raw_users') # to check if this foreign key exists in raw_users table
+                  field: user_id
+          - name: status
+            description: "Current State of order"
+            tests:
+              - accepted_values: 
+                  values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
+          - name: created_at
+            description: "Order created at (timestamp)"
+          - name: num_of_item
+            description: "Number of items included in an order"
+      
+      - name: raw_order_items
+        description: "Granular table containing individual line items per order."
+        columns:
+          - name: id
+            description: "Primary key for order items"
+            tests:
+              - unique
+              - not_null
+          - name: order_id
+            description: "Foreign key to the order table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('thelook_ecommerce', 'raw_orders')
+                  field: order_id
+          - name: user_id
+            description: "Foreign key to the user table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('thelook_ecommerce', 'raw_users')
+                  field: user_id
+          - name: product_id
+            description: "Foreign key to the product table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('thelook_ecommerce', 'raw_products')
+                  field: product_id
+          - name: inventory_item_id
+            description: "Foreign key to the inventory_item_id" # Not Included in the ingestion
+          - name: sale_price
+            description: "sale price of item"
+            tests:
+              - not_null
+          - name: status
+            description: "Current State of order"
+            tests:
+              - accepted_values: 
+                  values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
+          - name: created_at
+            description: "Order created at (timestamp)"
+      
+      - name: raw_products
+        description: "Product catalog including categories and retail prices."
+        columns:
+          - name: id
+            description: "Primary key for products"
+            tests:
+              - unique
+              - not_null
+          - name: cost
+            description: "The cost to acquire the product"
+            tests:
+              - not_null
+          - name: category
+            description: "Product category"
+          - name: brand
+            description: "Brand name of the product"
+          - name: retail_price
+            description: "The suggested retail price for the product"
+            tests:
+              - not_null
+          - name: distribution_center_id
+            description: "Foreign key to the distribution centers table" # Not Included in the ingestion
+
+      - name: raw_users
+        description: "Customer profile data including sign-up dates and demographics."
+        columns:
+          - name: id
+            description: user_id
+            tests:
+              - unique
+              - not_null
+          - name: email
+            description: "user email address"
