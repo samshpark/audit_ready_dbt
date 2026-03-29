@@ -6,3 +6,7 @@ logs/
 # Credentials
 credentials/
 *.json
+
+.user.yml
+profiles.yml
+dev.duckdb

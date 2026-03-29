@@ -24,13 +24,15 @@ sources:
             tests:
               - not_null
               - relationships:
-                  to: source('thelook_ecommerce', 'raw_users') # to check if this foreign key exists in raw_users table
-                  field: user_id
+                  arguments:
+                    to: source('thelook_ecommerce', 'raw_users') # to check if this foreign key exists in raw_users table
+                    field: user_id
           - name: status
             description: "Current State of order"
             tests:
               - accepted_values: 
-                  values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
+                  arguments:
+                    values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
           - name: created_at
             description: "Order created at (timestamp)"
           - name: num_of_item
@@ -49,22 +51,25 @@ sources:
             tests:
               - not_null
               - relationships:
-                  to: source('thelook_ecommerce', 'raw_orders')
-                  field: order_id
+                  arguments:
+                    to: source('thelook_ecommerce', 'raw_orders')
+                    field: order_id
           - name: user_id
             description: "Foreign key to the user table"
             tests:
               - not_null
               - relationships:
-                  to: source('thelook_ecommerce', 'raw_users')
-                  field: user_id
+                  arguments:
+                    to: source('thelook_ecommerce', 'raw_users')
+                    field: user_id
           - name: product_id
             description: "Foreign key to the product table"
             tests:
               - not_null
               - relationships:
-                  to: source('thelook_ecommerce', 'raw_products')
-                  field: product_id
+                  arguments:
+                    to: source('thelook_ecommerce', 'raw_products')
+                    field: product_id
           - name: inventory_item_id
             description: "Foreign key to the inventory_item_id" # Not Included in the ingestion
           - name: sale_price
@@ -75,7 +80,8 @@ sources:
             description: "Current State of order"
             tests:
               - accepted_values: 
-                  values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
+                  arguments:
+                    values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
           - name: created_at
             description: "Order created at (timestamp)"
       
