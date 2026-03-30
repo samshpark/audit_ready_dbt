@@ -47,25 +47,22 @@ I adopted a hybrid architecture to balance development efficiency and production
 ## 4. Financial Modeling & Accounting Logic
 This project moves beyond simple ETL by embedding **Accounting Principles** into the data transformation layer to ensure audit_ready data reliability
 
-### 0. Data Integrity & Reconciliation
-* **Process**: Performed a primary reconciliation between the Master table (Orders) and the Sub-ledger (Order Items) to verify completeness.
-* **Objective**: Every dollar in the transaction log must be traceable to a master order. Any variance triggers an automated Audit Alert, preventing downstream reporting errors.
+### 1. Revenue & Order Integrity (Master-to-Subledger Reconciliation)
+* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items).
+* **Process**: Engineered an automated reconciliation logic to verify that the sum of all individual transaction lines matches the master order record.
+* **Control**: Any variance between the sub-ledger and the master record triggers an Audit Alert, preventing downstream reporting errors and ensuring data reliability for financial audits.
 
-### 1. Revenue Recognition & Accrual BasedCut-off
+### 2. Revenue Recognition & Cut-off
 * **Logic**: Implemented revenue recognition based on the **Accrual Basis**, using shipped_at as the primary trigger for revenue realization.
 * **Control**: Analyzed the variance between payment (created_at) and fulfillment (shipped_at) to manage year-end Cut-off risks.
 
-### 2. Returns & Refund Reconciliation
+### 3. Returns & Refund Reconciliation
 * **Matching**: Engineered a logic to link refund transactions back to original order_ids rather than treating them as isolated negative flows.
 * **Integrity**: Ensures accurate calculation of Net Revenue by accounting for historical reversals.
 
-### 3. Inventory Valuation (FIFO)
+### 4. Inventory Valuation (FIFO) & Aging
 * **Methodology**: Implemented a **First-In, First-Out (FIFO)** valuation model using SQL Window Functions.
 * **Aging Analysis**: Built models to identify slow-moving inventory and calculate potential Lower of Cost or Market (LCM) adjustments.
-
-### 4. Automated Reconciliation (Internal Controls)
-* **Transaction-to-Order**: Automated check to ensure the sum of order_items matches the master orders record.
-* **Sub-ledger to GL**: Built a variance detection model that flags discrepancies between transactional sub-ledgers and General Ledger summaries.
 
 ---
 
