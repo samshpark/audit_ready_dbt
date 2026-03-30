@@ -17,7 +17,7 @@ reformat AS (
         latitude,
         longitude,
         LOWER(traffic_source) AS traffic_source,
-        created_at,
+        strftime(CAST(created_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS created_at,
         user_geom
     FROM
         source

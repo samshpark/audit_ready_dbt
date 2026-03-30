@@ -9,10 +9,10 @@ reformat AS (
         CAST(product_id AS STRING) AS product_id,
         CAST(inventory_item_id AS STRING) AS inventory_item_id,
         LOWER(status) AS order_item_status,
-        created_at, -- UTC timestamp
-        shipped_at,
-        delivered_at,
-        returned_at,
+        strftime(CAST(created_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS created_at, -- UTC timestamp
+        strftime(CAST(shipped_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS shipped_at,
+        strftime(CAST(delivered_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS delivered_at,
+        strftime(CAST(returned_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS returned_at,
         CAST(sale_price AS DOUBLE) AS sale_price
     FROM
         source
