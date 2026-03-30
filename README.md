@@ -19,7 +19,6 @@ I adopted a hybrid architecture to balance development efficiency and production
 1.  **Data Source (Ingestion):** 
     * **Primary Source:** Google BigQuery Public Dataset (`thelook_ecommerce`).
     * **Local Ingestion:** Key tables (Orders, Items, Products) are ingested as Parquet/CSV files for local development, simulating a real-world data extraction process.
-
 2.  **Automated Ingestion (Python):** * To ensure an **Audit Trail** and reduce cloud compute costs, I developed a custom **Python Ingestion Script**. 
     * This script extracts raw data from Google BigQuery via API and snapshots it into local **Parquet** files. This approach allows for point-in-time data validation (Snapshotting) and 100% offline development.   
 3.  **Local Development (Efficiency):** Powered by DuckDB for high-performance analytical processing on Apple Silicon. This allows for rapid iteration and testing with zero cloud costs.
