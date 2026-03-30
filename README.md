@@ -46,14 +46,22 @@ I adopted a hybrid architecture to balance development efficiency and production
 ## 4. Financial Modeling & Accounting Logic
 This project moves beyond simple ETL by embedding **Accounting Principles** into the data transformation layer to ensure audit_ready data reliability
 
-### 1. Revenue & Order Integrity (Master-to-Subledger Reconciliation)
-* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items).
-* **Process**: Engineered an automated reconciliation logic to verify that the sum of all individual transaction lines matches the master order record.
-* **Control**: Any variance between the sub-ledger and the master record triggers an Audit Alert, preventing downstream reporting errors and ensuring data reliability for financial audits.
+### 1. Financial Data Reconciliation (Master-to-Subledger) - 📂 models/marts/fct_order_recon.sql
+* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items). 
+* **Validation Logic**: 
+    - **Completeness**: Verified 'order_id' matches across all layers to ensure no data loss.
+    - **Accuracy**: Reconciled total item counts and order statuses between master records and granular transaction lines.
+    - **Status Synchronization**: Validated **Order Status alignment** to detect any state-mismatch discrepancies between the header and line levels.
+* **Audit Control**: Engineered an automated reconciliation layer that triggers an Audit Alert for any variance. This proactive control prevents downstream reporting errors and ensures the data is **"Audit-Ready"** for financial verification.
 
-### 2. Revenue Recognition & Cut-off
-* **Logic**: Implemented revenue recognition based on the **Accrual Basis**, using shipped_at as the primary trigger for revenue realization.
-* **Control**: Analyzed the variance between payment (created_at) and fulfillment (shipped_at) to manage year-end Cut-off risks.
+### 2. Revenue Recognition & Cut-off Management - 📂 models/marts/fct_revenue.sql
+* **Revenue Recognition Logic**: Implemented **Accrual Basis** accounting by designating 'shipped_at' (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** standards.
+* **Complex Order State Management**: 
+    - Utilized 'STRING_AGG(DISTINCT status)' to synchronize and monitor multiple item statuses within a single 'order_id'.
+    - Applied **COALESCE logic** to prevent data loss across the Full-Join between Master and Sub-ledger, maintaining a Single Source of Truth (SSOT).
+* **Temporal Analysis & Cut-off Control**:
+    - Engineered logic to analyze the time-lag between **Order Creation ('created_at')** and **Fulfillment ('shipped_at')**.
+    - **Risk Mitigation**: Automated detection of **Potential Cut-off Risks** where revenue recognition spans different fiscal periods, preventing overstatement of monthly/yearly earnings.
 
 ### 3. Returns & Refund Reconciliation
 * **Matching**: Engineered a logic to link refund transactions back to original order_ids rather than treating them as isolated negative flows.
