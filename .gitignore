@@ -10,3 +10,6 @@ credentials/
 .user.yml
 profiles.yml
 dev.duckdb
+
+.DS_Store
+venv/
