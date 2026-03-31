@@ -20,49 +20,43 @@ client = bigquery.Client(credentials=credentials, project=credentials.project_id
 # Ensure the 'data' directory exists to store  local 'snapshots'
 os.makedirs("data", exist_ok=True)
 
-# Function 
-def ingest_table(table_id, file_name, sort_column):
-    """
-    Extracts data from BigQuery and saves it as a local Parquet file.
-    Uses a dynamic sort_column to handle different table schemas.
-    """
-    print(f"[Ingestion] Starting extraction for table: '{table_id}'...")
-    
-    # SQL Query: Fetching from theLook eCommerce public dataset
-    # Dynamic Query: Uses the specific sort_column for each table
-    # We limit to 5,000 rows to keep local development fast and cost-effective.
-    query = f"""
-        SELECT * FROM `bigquery-public-data.thelook_ecommerce.{table_id}` 
-        ORDER BY {sort_column} DESC 
-        LIMIT 5000
-    """
-    
-    try:
-        # Execute Query & Convert to Pandas DataFrame
-        # 'db-dtypes' is required for BigQuery to Pandas conversion
-        df = client.query(query).to_dataframe()
-        
-        # Save as Parquet (Recommended for AE portfolios)
-        # Parquet preserves data types (integers, timestamps) better than CSV.
+def save_to_parquet(df, file_name):
+    if df is not None and not df.empty:
         output_path = f"data/{file_name}.parquet"
         df.to_parquet(output_path, index=False)
-        
-        print(f"[Success] {output_path} saved successfully! ({len(df)} rows)")
-    except Exception as e:
-        print(f"[Error] Failed to ingest {table_id}: {e}")
+        print(f"[Ingestion Success] {output_path} saved! ({len(df)} rows)")
+        return df
+    return None
 
-# 3. MAIN EXECUTION LOOP
-if __name__ == "__main__":
-    # Dictionary mapping: {BigQuery_Table_Name : (Local_File_Name, Sort_column)}
-    # Products table uses 'id' instead of 'created_at'
-    target_tables = {
-        "orders": ("raw_orders", "created_at"),
-        "order_items": ("raw_order_items", "created_at"),
-        "products": ("raw_products", "id"),
-        "users": ("raw_users", "created_at")
-    }
-    
-    print("--- Financial Data Pipeline: Ingestion Phase ---")
-    for bq_table, (local_name, sort_col) in target_tables.items():
-        ingest_table(bq_table, local_name, sort_col)
-    print("--- Ingestion Completed! Your local 'Data Lake' is ready. ---")
+# 3. STRATEGIC INGESTION
+if __name__ == "__main__": # Execute the following block only if the script is run directly
+    print("[SYSTEM] Starting Financial Data Pipeline: Full Referential Integrity Mode")
+
+    # [Step 1] Orders: Get most recent 5000 orders
+    orders_query = "SELECT * FROM `bigquery-public-data.thelook_ecommerce.orders` ORDER BY created_at DESC LIMIT 5000"
+    df_orders = client.query(orders_query).to_dataframe()
+    save_to_parquet(df_orders, "raw_orders")
+
+    if not df_orders.empty:
+        order_ids = ", ".join(map(str, df_orders['order_id'].tolist()))
+        user_ids = ", ".join(map(str, df_orders['user_id'].unique().tolist()))
+
+        # [Step 2] Order Items: get order items that are associated with 5000 orders above
+        items_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.order_items` WHERE order_id IN ({order_ids})"
+        df_items = client.query(items_query).to_dataframe()
+        save_to_parquet(df_items, "raw_order_items")
+
+        # [Step 3] Users: get user info that are associated with 5000 orders above
+        users_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.users` WHERE id IN ({user_ids})"
+        df_users = client.query(users_query).to_dataframe()
+        save_to_parquet(df_users, "raw_users")
+
+        if not df_items.empty:
+            product_ids = ", ".join(map(str, df_items['product_id'].unique().tolist()))
+            
+            # [Step 4] Products: get product info that are associated with order_items above
+            products_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.products` WHERE id IN ({product_ids})"
+            df_products = client.query(products_query).to_dataframe()
+            save_to_parquet(df_products, "raw_products")
+
+    print("\n--- Ingestion Completed: All tables are perfectly linked! ---")
