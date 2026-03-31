@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: fct_revenue
+    description: "Orders and items joined to calculate recognized revenue and audit risks."
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+
+      - name: data_integrity_status
+        description: "Checks if order exists in both master and sub-ledger."
+        tests:
+          - accepted_values:
+              values: ['MATCHED', 'ERR: ORPHAN SUB-LEDGER', 'ERR: MISSING SUB-LEDGER']
+
+      - name: cutoff_status
+        description: "Identifies month-end shipping risks for revenue recognition."
+        tests:
+          - accepted_values:
+              values: ['NORMAL', 'SHIPPING_PENDING', 'POTENTIAL CUT-OFF RISK']
