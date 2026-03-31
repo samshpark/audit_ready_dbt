@@ -26,7 +26,7 @@ sources:
               - relationships:
                   arguments:
                     to: source('thelook_ecommerce', 'raw_users') # to check if this foreign key exists in raw_users table
-                    field: user_id
+                    field: id
           - name: status
             description: "Current State of order"
             tests:
@@ -61,7 +61,7 @@ sources:
               - relationships:
                   arguments:
                     to: source('thelook_ecommerce', 'raw_users')
-                    field: user_id
+                    field: id
           - name: product_id
             description: "Foreign key to the product table"
             tests:
@@ -69,7 +69,7 @@ sources:
               - relationships:
                   arguments:
                     to: source('thelook_ecommerce', 'raw_products')
-                    field: product_id
+                    field: id
           - name: inventory_item_id
             description: "Foreign key to the inventory_item_id" # Not Included in the ingestion
           - name: sale_price

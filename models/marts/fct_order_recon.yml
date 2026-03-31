@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: fct_order_recon
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+      - name: order_reconciliation
+        tests:
+          - accepted_values:
+              values: [
+                'RECONCILIATION SUCCESSFUL', 
+                'ERR: ORPHAN SUB-LEDGER', 
+                'ERR: MISSING SUB-LEDGER'
+              ]
+      - name: order_item_count_recon
+        description: "Identify if item count in master & sub-ledger agrees"
+        tests:
+          - accepted_values:
+              values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
+      
+      - name: order_status_recon
+        description: "Identify if order status in master & sub-ledger agrees"
+        tests:
+          - accepted_values:
+              values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
