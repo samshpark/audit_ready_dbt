@@ -13,3 +13,5 @@ dev.duckdb
 
 .DS_Store
 venv/
+
+models/marts/test.sql

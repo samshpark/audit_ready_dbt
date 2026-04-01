@@ -19,7 +19,7 @@ I adopted a hybrid architecture to balance development efficiency and production
 1.  **Data Source (Ingestion):** 
     * **Primary Source:** Google BigQuery Public Dataset (`thelook_ecommerce`).
     * **Local Ingestion:** Key tables (Orders, Items, Products) are ingested as Parquet/CSV files for local development, simulating a real-world data extraction process.
-2.  **Automated Ingestion (Python):** * To ensure an **Audit Trail** and reduce cloud compute costs, I developed a custom **Python Ingestion Script**. 
+2.  **Automated Ingestion (Python):** * To ensure an **Audit Trail** and reduce cloud compute costs, I developed a custom **Python Ingestion Script** (📂 - ingest_data.py)
     * This script extracts raw data from Google BigQuery via API and snapshots it into local **Parquet** files. This approach allows for point-in-time data validation (Snapshotting) and 100% offline development.   
 3.  **Local Development (Efficiency):** Powered by DuckDB for high-performance analytical processing on Apple Silicon. This allows for rapid iteration and testing with zero cloud costs.
 4.  **Cloud Scalability (Production):** Designed to be fully compatible with BigQuery. The dbt profiles are configured to switch from local DuckDB to enterprise-grade BigQuery with a single command.
@@ -55,7 +55,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Audit Control**: Engineered an automated reconciliation layer that triggers an Audit Alert for any variance. This proactive control prevents downstream reporting errors and ensures the data is **"Audit-Ready"** for financial verification.
 
 ### 2. Revenue Recognition & Cut-off Management - 📂 models/marts/fct_revenue.sql
-* **Revenue Recognition Logic**: Implemented **Accrual Basis** accounting by designating 'shipped_at' (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** standards.
+* **Objective**: Implemented **Accrual Basis** accounting standards by designating 'shipped_at' (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** principles.
 * **Complex Order State Management**: 
     - Utilized 'STRING_AGG(DISTINCT status)' to synchronize and monitor multiple item statuses within a single 'order_id'.
     - Applied **COALESCE logic** to prevent data loss across the Full-Join between Master and Sub-ledger, maintaining a Single Source of Truth (SSOT).
@@ -63,9 +63,22 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
     - Engineered logic to analyze the time-lag between **Order Creation ('created_at')** and **Fulfillment ('shipped_at')**.
     - **Risk Mitigation**: Automated detection of **Potential Cut-off Risks** where revenue recognition spans different fiscal periods, preventing overstatement of monthly/yearly earnings.
 
-### 3. Returns & Refund Reconciliation
-* **Matching**: Engineered a logic to link refund transactions back to original order_ids rather than treating them as isolated negative flows.
-* **Integrity**: Ensures accurate calculation of Net Revenue by accounting for historical reversals.
+### 3. Returns & Refund Reconciliation - 📂 models/marts/fct_refund_reconciliation.sql
+* **Objective**: Developed a mechanism to **link refund events back to their original 'order_id'**, moving away from treating refunds as isolated negative flows to provide a holistic view of the order lifecycle.
+* **Revenue Reversal Integrity**: Ensured accurate **Net Revenue** calculation by accounting for historical reversals, eliminating the risk of overstated top-line metrics.
+* **Audit Trail**: Created a 'refund_type' classification and 'refund_rate' metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
+
+    - **Challenge**: The thelook_ecommerce dataset on BigQuery synchronizes statuses at the order-header level, meaning all items within a single order_id share the same status. This results in a lack of **"Partial Refund"** scenarios, which are critical for real-world e-commerce revenue reconciliation and accurate net revenue calculation.
+
+    - **Solution**: To validate the robustness of the reconciliation logic, I implemented a **Unit Testing** environment using **dbt Seeds**.
+
+        1. **Automated Synthetic Data Generation (via Python)**: Developed a Python script (📂 - scripts/create_sample_order_items.py) to programmatically generate synthetic transactional data. This script was specfically engineered to simulate "multi-item orders with mix statuses" (e.g. one item completed, another returned within same 'order_id'), which were missing in the original production dataset. 
+
+        2. **Isolated Test Environment**: Constructed a separate test model to validate the aggregation logic in isolation, ensuring that the integrity of the core production data remained uncompromised. 
+
+        3. **Logic Verification**: Successfully verified that the model accurately **links individual events back to their original** 'order_id', correctly identifying 'PARTIALLY REFUNDED' cases and calculating precise refund rates and values.
+
+    - **Engineering Value: Future Proof Modeling**: Although the current source data lacks partial refund variety, I designed this logic to be **future-proof**. By simulating these scenarios, I’ve ensured the model is ready for complex, real-world transactional environments—moving beyond simple data transformation to **proactive business logic modeling**.
 
 ### 4. Inventory Valuation (FIFO) & Aging
 * **Methodology**: Implemented a **First-In, First-Out (FIFO)** valuation model using SQL Window Functions.
