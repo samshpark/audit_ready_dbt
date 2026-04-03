@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: synth_stg_order_items
+    description: "Sample Data created from python code"
+    columns:
+      - name: order_item_id
+        description: "Primary key for order items"
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Foreign key to the order table"
+        tests:
+          - not_null
+      - name: user_id
+        description: "Foreign key to the user table"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('thelook_ecommerce', 'raw_users')
+                field: id
+      - name: product_id
+        description: "Foreign key to the product table"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: source('thelook_ecommerce', 'raw_products')
+                field: id
+      - name: inventory_item_id
+        description: "Foreign key to the inventory_item_id" # Not Included in the ingestion
+      - name: sale_price
+        description: "sale price of item"
+        tests:
+          - not_null
+      - name: order_item_status
+        description: "Current State of order"
+        tests:
+          - accepted_values: 
+              arguments:
+                values: ['processing', 'shipped', 'complete', 'returned', 'cancelled']
+      - name: created_at
+        description: "Order created at (timestamp)"
