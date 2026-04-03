@@ -118,3 +118,29 @@ sources:
               - not_null
           - name: email
             description: "user email address"
+
+      - name: raw_inventory_items
+        description: "Include each inventory item and description."
+        columns:
+          - name: id
+            description: "Primary key for inventory items"
+            tests:
+              - unique
+              - not_null
+          - name: product_id
+            description: "Foreign key to the product table"
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('thelook_ecommerce', 'raw_products')
+                    field: id
+          - name: created_at
+            description: "Order created at (timestamp)"
+          - name: cost
+            description: "Historical acquisition cost per unit."
+            tests:
+              - dbt_utils.expression_is_true:
+                  expression: ">= 0"
+          - name: product_distribution_center_id
+            description: "Foreign key to the distribution centers table" # Not Included in the ingestion
