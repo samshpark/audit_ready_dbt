@@ -46,7 +46,13 @@ if __name__ == "__main__": # Execute the following block only if the script is r
         df_items = client.query(items_query).to_dataframe()
         save_to_parquet(df_items, "raw_order_items")
 
-        # [Step 3] Users: get user info that are associated with 5000 orders above
+        # [Step 3] Inventory Item: get user info that are associated with 5000 orders above
+        inventory_item_ids = ", ".join(map(str, df_items['inventory_item_id'].unique().tolist()))
+        inventory_item_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.inventory_items` WHERE id IN ({inventory_item_ids})"
+        df_inventory_items = client.query(inventory_item_query).to_dataframe()
+        save_to_parquet(df_inventory_items, "raw_inventory_items")
+
+        # [Step 4] Users: get user info that are associated with 5000 orders above
         users_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.users` WHERE id IN ({user_ids})"
         df_users = client.query(users_query).to_dataframe()
         save_to_parquet(df_users, "raw_users")
@@ -54,7 +60,7 @@ if __name__ == "__main__": # Execute the following block only if the script is r
         if not df_items.empty:
             product_ids = ", ".join(map(str, df_items['product_id'].unique().tolist()))
             
-            # [Step 4] Products: get product info that are associated with order_items above
+            # [Step 5] Products: get product info that are associated with order_items above
             products_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.products` WHERE id IN ({product_ids})"
             df_products = client.query(products_query).to_dataframe()
             save_to_parquet(df_products, "raw_products")
