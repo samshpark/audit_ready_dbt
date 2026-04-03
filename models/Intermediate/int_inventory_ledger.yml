@@ -45,8 +45,9 @@ models:
           or (Current Date - Inbound Date) for ending inventory.
         tests:
           - dbt_utils.expression_is_true:
-              expression: ">= 0"
-              description: "Ensures no 'time-travel' where outbound occurs before inbound."
+              arguments:
+                expression: ">= 0"
+                description: "Ensures no 'time-travel' where outbound occurs before inbound."
           - not_null:
               where: "inbound_at is not null"
 
@@ -54,7 +55,8 @@ models:
         description: "The original acquisition cost per unit (FIFO basis)."
         tests:
           - dbt_utils.expression_is_true:
-              expression: ">= 0"
+              arguments:
+                expression: ">= 0"
 
       - name: current_market_price
         description: "The current retail price, used as a proxy for Market Value in LCM calculations."
@@ -63,24 +65,27 @@ models:
         description: "The carrying value per unit based on the Lower of Cost or Market (LCM) principle."
         tests:
           - dbt_utils.expression_is_true:
-              expression: "<= historical_unit_cost"
-              description: "Inventory cannot be valued higher than its historical cost under conservative accounting."
+              arguments:
+                expression: "<= historical_unit_cost"
+                description: "Inventory cannot be valued higher than its historical cost under conservative accounting."
 
       - name: inventory_valuation_loss
         description: "The unrealized loss (Allowance) recognized when Market Value drops below Cost."
         tests:
           - dbt_utils.expression_is_true:
-              expression: ">= 0"
+              arguments:
+                expression: ">= 0"
 
       - name: stock_status
         description: "Classification of the item's current state: On-hand (Ending Inventory) or Sold (COGS)."
         tests:
           - accepted_values:
-              values: 
-                - 'On-hand (Ending Inventory)'
-                - 'Sold (COGS)'
-                - 'Error: Outbound without Inbound'
-              quote: true
+              arguments:
+                values: 
+                  - 'On-hand (Ending Inventory)'
+                  - 'Sold (COGS)'
+                  - 'Error: Outbound without Inbound'
+                quote: true
 
       - name: aging_velocity_bucket
         description: >
@@ -95,5 +100,6 @@ models:
         description: "Internal control flag checking if the Inbound product_id matches the Outbound product_id."
         tests:
           - accepted_values:
-              values: ['Product Match', 'Product Not Match']
-              severity: warn # Triggers a warning for investigation if IDs are mismatched.
+              arguments:
+                values: ['Product Match', 'Product Not Match']
+                severity: warn # Triggers a warning for investigation if IDs are mismatched.

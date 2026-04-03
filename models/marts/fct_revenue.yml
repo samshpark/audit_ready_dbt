@@ -13,10 +13,12 @@ models:
         description: "Checks if order exists in both master and sub-ledger."
         tests:
           - accepted_values:
-              values: ['MATCHED', 'ERR: ORPHAN SUB-LEDGER', 'ERR: MISSING SUB-LEDGER']
+              arguments:
+                values: ['MATCHED', 'ERR: ORPHAN SUB-LEDGER', 'ERR: MISSING SUB-LEDGER']
 
       - name: cutoff_status
         description: "Identifies month-end shipping risks for revenue recognition."
         tests:
           - accepted_values:
-              values: ['NORMAL', 'SHIPPING_PENDING', 'POTENTIAL CUT-OFF RISK']
+              arguments:
+                values: ['NORMAL', 'SHIPPING_PENDING', 'POTENTIAL CUT-OFF RISK']

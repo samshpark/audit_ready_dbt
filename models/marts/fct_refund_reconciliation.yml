@@ -8,9 +8,10 @@ models:
     
     tests:
       - dbt_utils.expression_is_true:
-          expression: "refund_amount <= gross_revenue"
-          name: assert_refund_not_exceeding_revenue
-          description: "Refund cannot exceed the original transaction value (Audit Control)."
+          arguments:
+            expression: "refund_amount <= gross_revenue"
+            name: assert_refund_not_exceeding_revenue
+            description: "Refund cannot exceed the original transaction value (Audit Control)."
 
     columns:
       - name: order_id
@@ -23,21 +24,24 @@ models:
         description: "Classification of refund based on synthetic data testing."
         tests:
           - accepted_values:
-              values: ['FULLY REFUNDED', 'PARTIALLY REFUNDED', 'NO REFUND']
+              arguments:
+                values: ['FULLY REFUNDED', 'PARTIALLY REFUNDED', 'NO REFUND']
 
       - name: refund_count_rate
         description: "Calculated refund count percentage per order. Tested against synthetic edge cases."
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 1
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
       
       - name: refund_value_rate
         description: "Calculated refund value percentage per order. Tested against synthetic edge cases."
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 1
-              inclusive: true
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
 

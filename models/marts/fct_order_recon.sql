@@ -16,6 +16,7 @@ order_items AS (
     GROUP BY
         1
 ),
+
 final AS (
 
     SELECT

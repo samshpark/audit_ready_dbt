@@ -7,12 +7,12 @@ sources:
     
     # meta: external_location allows DuckDB to map dbt source names 
     # directly to the local file path. {name} maps to the table name below.
-    meta:
-      external_location: "data/{name}.parquet"
-
+    
     tables:
       - name: raw_orders
         description: "Primary table for order headers and status."
+        meta:
+          external_location: "data/{name}.parquet"
         columns:
           - name: order_id
             description: "Primary key for orders"
@@ -40,6 +40,8 @@ sources:
       
       - name: raw_order_items
         description: "Granular table containing individual line items per order."
+        meta:
+          external_location: "data/{name}.parquet"
         columns:
           - name: id
             description: "Primary key for order items"
@@ -87,6 +89,8 @@ sources:
       
       - name: raw_products
         description: "Product catalog including categories and retail prices."
+        meta:
+          external_location: "data/{name}.parquet"
         columns:
           - name: id
             description: "Primary key for products"
@@ -110,6 +114,8 @@ sources:
 
       - name: raw_users
         description: "Customer profile data including sign-up dates and demographics."
+        meta:
+          external_location: "data/{name}.parquet"
         columns:
           - name: id
             description: user_id
@@ -121,6 +127,8 @@ sources:
 
       - name: raw_inventory_items
         description: "Include each inventory item and description."
+        meta:
+          external_location: "data/{name}.parquet"
         columns:
           - name: id
             description: "Primary key for inventory items"
@@ -141,6 +149,7 @@ sources:
             description: "Historical acquisition cost per unit."
             tests:
               - dbt_utils.expression_is_true:
-                  expression: ">= 0"
+                  arguments:
+                    expression: ">= 0"
           - name: product_distribution_center_id
             description: "Foreign key to the distribution centers table" # Not Included in the ingestion

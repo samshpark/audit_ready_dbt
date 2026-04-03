@@ -1,4 +1,4 @@
-# analytical-engineering-projects
+# Analytical Engineering Project
 **Financial Data Pipeline & Reconciliation: E-commerce Case Study**
 > **CPA's perspective on ensuring financial data integrity using the Modern Data Stack**
 
@@ -150,7 +150,7 @@ python scripts/ingest_data.py
 4. Create synthetic data
 ```bash
 # This script generates synthetic data for partial refund scenarios for order items 
-python scripts/ 
+python scripts/create_sample_order_items.py
 ```
 
 5. Run dbt Pipeline (Seed -> Run -> Test)
