@@ -17,7 +17,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** files via API.
 * **Synthetic Engineering** (📂 `scripts/create_sample_order_items.py`): Generates **"Partial Refund"** scenarios to validate edge-case reconciliation logic.
 * **Local Data Lake**: 
-    - 📂 `data/raw_orders.parquet`, `raw_order_items.parquet`, `raw_products.parquet`, `raw_users.parquet`
+    - 📂 `data/raw_orders.parquet`, `raw_order_items.parquet`, `raw_products.parquet`, `raw_users.parquet`, `raw_inventory_items.parquet`
     - 📂 `seeds/data_test_order_items.csv` (**Synthetic Seed** for logic verification)
 
 ### 2. High-Performance Local Development
@@ -30,8 +30,10 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `models/staging/stg_order_items.sql`
     - 📂 `models/staging/stg_products.sql`
     - 📂 `models/staging/stg_users.sql`
+    - 📂 `models/staging/stg_inventory_items.sql`
     - 📂 `models/staging/synth_stg_order_items.sql` (**Test Layer**)
-* **Intermediate**: Streamlined for efficiency; core logic is consolidated into Marts to reduce pipeline complexity while the source data remains high-integrity.
+* **Intermediate**: 
+    - 📂 `models/intermediate/int_inventory_ledger.sql`
 * **Marts (Audit Layer)**:
     - 📂 `models/marts/fct_order_recon.sql`: Master-to-Subledger reconciliation.
     - 📂 `models/marts/fct_revenue.sql`: Accrual-based revenue recognition.
@@ -40,6 +42,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 ### 4. Quality Control
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
     - 📂 `models/staging/source.yml`, `synth_stg_order_items.yml`, `fct_order_recon.yml`
+    - 📂 `models/intermediate/int_inventory_ledger.yml`
     - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
     - 📂 `tests/assert_no_variance_in_order_recon.sql`
     - 📂 `models/marts/assert_revenue_recognition_logic.yml`

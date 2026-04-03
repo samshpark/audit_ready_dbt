@@ -1,0 +1,99 @@
+version: 2
+
+models:
+  - name: int_inventory_ledger
+    description: >
+      A comprehensive sub-ledger at the individual item level (inventory_item_id). 
+      This model performs a FULL JOIN between Inbound (Inventory Items) and Outbound (Order Items) 
+      to track the full lifecycle of each unit. It includes financial logic for 
+      Lower of Cost or Market (LCM) valuation and aging-based categorization.
+    
+    config:
+      tags: ['financial', 'inventory_level', 'audit_ready']
+
+    columns:
+      - name: inventory_item_id
+        description: "Primary Key. Unique identifier for each physical unit in the warehouse."
+        tests:
+          - unique
+          - not_null
+
+      - name: product_id
+        description: "Foreign Key to the product catalog. Coalesced from both inbound and outbound sources."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+
+      - name: product_category
+        description: "The broad category of the product (e.g., Jeans, Sweaters)."
+      
+      - name: product_name
+        description: "The full descriptive name of the product."
+
+      - name: inbound_at
+        description: "Timestamp when the item was first received in the inventory."
+
+      - name: outbound_at
+        description: "Timestamp when the item was shipped to a customer. Null if the item is still on-hand."
+
+      - name: days_in_inventory
+        description: >
+          The number of days the item spent in the warehouse. 
+          Calculated as (Outbound Date - Inbound Date) for sold items, 
+          or (Current Date - Inbound Date) for ending inventory.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+              description: "Ensures no 'time-travel' where outbound occurs before inbound."
+          - not_null:
+              where: "inbound_at is not null"
+
+      - name: historical_unit_cost
+        description: "The original acquisition cost per unit (FIFO basis)."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: current_market_price
+        description: "The current retail price, used as a proxy for Market Value in LCM calculations."
+
+      - name: lcm_unit_valuation
+        description: "The carrying value per unit based on the Lower of Cost or Market (LCM) principle."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: "<= historical_unit_cost"
+              description: "Inventory cannot be valued higher than its historical cost under conservative accounting."
+
+      - name: inventory_valuation_loss
+        description: "The unrealized loss (Allowance) recognized when Market Value drops below Cost."
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: stock_status
+        description: "Classification of the item's current state: On-hand (Ending Inventory) or Sold (COGS)."
+        tests:
+          - accepted_values:
+              values: 
+                - 'On-hand (Ending Inventory)'
+                - 'Sold (COGS)'
+                - 'Error: Outbound without Inbound'
+              quote: true
+
+      - name: aging_velocity_bucket
+        description: >
+          Categorizes items based on their duration in stock. 
+          For On-hand: Healthy, Stagnant, Slow-moving, Obsolete. 
+          For Sold: Fast, Normal, Slow, Very Slow.
+        tests:
+          - not_null:
+              where: "inbound_at is not null"
+
+      - name: product_match
+        description: "Internal control flag checking if the Inbound product_id matches the Outbound product_id."
+        tests:
+          - accepted_values:
+              values: ['Product Match', 'Product Not Match']
+              severity: warn # Triggers a warning for investigation if IDs are mismatched.

@@ -38,21 +38,25 @@ if __name__ == "__main__": # Execute the following block only if the script is r
     save_to_parquet(df_orders, "raw_orders")
 
     if not df_orders.empty:
-        order_ids = ", ".join(map(str, df_orders['order_id'].tolist()))
-        user_ids = ", ".join(map(str, df_orders['user_id'].unique().tolist()))
-
         # [Step 2] Order Items: get order items that are associated with 5000 orders above
+        order_ids = ", ".join(map(str, df_orders['order_id'].tolist()))
         items_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.order_items` WHERE order_id IN ({order_ids})"
         df_items = client.query(items_query).to_dataframe()
         save_to_parquet(df_items, "raw_order_items")
 
         # [Step 3] Inventory Item: get user info that are associated with 5000 orders above
-        inventory_item_ids = ", ".join(map(str, df_items['inventory_item_id'].unique().tolist()))
-        inventory_item_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.inventory_items` WHERE id IN ({inventory_item_ids})"
-        df_inventory_items = client.query(inventory_item_query).to_dataframe()
-        save_to_parquet(df_inventory_items, "raw_inventory_items")
+        if not df_items.empty:
+                product_ids = ", ".join(map(str, df_items['product_id'].unique().tolist()))
+        
+                inventory_item_query = f"""
+                        SELECT * FROM `bigquery-public-data.thelook_ecommerce.inventory_items` 
+                        WHERE product_id IN ({product_ids})
+                    """
+                df_inventory_items = client.query(inventory_item_query).to_dataframe()
+                save_to_parquet(df_inventory_items, "raw_inventory_items")
 
         # [Step 4] Users: get user info that are associated with 5000 orders above
+        user_ids = ", ".join(map(str, df_orders['user_id'].unique().tolist()))
         users_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.users` WHERE id IN ({user_ids})"
         df_users = client.query(users_query).to_dataframe()
         save_to_parquet(df_users, "raw_users")
