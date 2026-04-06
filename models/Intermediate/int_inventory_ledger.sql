@@ -45,14 +45,8 @@ final AS (
             WHEN inb.inbound_at IS NULL THEN NULL 
             WHEN outb.outbound_at IS NOT NULL 
             THEN DATEDIFF('day', CAST(inb.inbound_at AS DATE), CAST(outb.outbound_at AS DATE))
-            -- 미래 입고분은 아직 보유일수가 0일인 것으로 처리
+            -- 0 if future inbound
             ELSE GREATEST(DATEDIFF('day', CAST(inb.inbound_at AS DATE), CURRENT_DATE), 0)
-        END AS days_in_inventory,
-
-        CASE WHEN inb.inbound_at IS NULL THEN NULL 
-            WHEN outb.outbound_at IS NOT NULL 
-            THEN DATEDIFF('day', CAST(inb.inbound_at AS DATE), CAST(outb.outbound_at AS DATE))
-            ELSE DATEDIFF('day', CAST(inb.inbound_at AS DATE), CURRENT_DATE)
         END AS days_in_inventory,
 
         CASE 
@@ -88,3 +82,4 @@ final AS (
 )
 
 SELECT * FROM final
+ORDER BY product_id

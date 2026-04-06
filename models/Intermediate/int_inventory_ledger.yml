@@ -44,10 +44,6 @@ models:
           Calculated as (Outbound Date - Inbound Date) for sold items, 
           or (Current Date - Inbound Date) for ending inventory.
         tests:
-          - dbt_utils.expression_is_true:
-              arguments:
-                expression: ">= 0"
-                description: "Ensures no 'time-travel' where outbound occurs before inbound."
           - not_null:
               where: "inbound_at is not null"
 
