@@ -32,19 +32,38 @@ def save_to_parquet(df, file_name):
 if __name__ == "__main__": # Execute the following block only if the script is run directly
     print("[SYSTEM] Starting Financial Data Pipeline: Full Referential Integrity Mode")
 
-    # [Step 1] Orders: Get most recent 5000 orders
-    orders_query = "SELECT * FROM `bigquery-public-data.thelook_ecommerce.orders` ORDER BY created_at DESC LIMIT 5000"
+    # [Step 1] Orders: Choose random 1000 product and get all orders related to the product
+    orders_query = """
+    WITH random_products AS (
+    SELECT DISTINCT product_id
+    FROM `bigquery-public-data.thelook_ecommerce.order_items`
+    ORDER BY RAND()
+    LIMIT 1000
+    ),
+
+    target_order_ids AS (
+        SELECT DISTINCT oi.order_id
+        FROM `bigquery-public-data.thelook_ecommerce.order_items` oi
+        INNER JOIN random_products rp ON oi.product_id = rp.product_id
+    )
+
+    SELECT o.*
+    FROM `bigquery-public-data.thelook_ecommerce.orders` o
+    INNER JOIN target_order_ids t ON o.order_id = t.order_id
+    ORDER BY o.created_at DESC                              
+    """
+
     df_orders = client.query(orders_query).to_dataframe()
     save_to_parquet(df_orders, "raw_orders")
 
     if not df_orders.empty:
-        # [Step 2] Order Items: get order items that are associated with 5000 orders above
+        # [Step 2] Order Items: get order items that are in [Step 1] query 
         order_ids = ", ".join(map(str, df_orders['order_id'].tolist()))
         items_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.order_items` WHERE order_id IN ({order_ids})"
         df_items = client.query(items_query).to_dataframe()
         save_to_parquet(df_items, "raw_order_items")
 
-        # [Step 3] Inventory Item: get user info that are associated with 5000 orders above
+        # [Step 3] Inventory Item: get user info that are in [Step 1] query
         if not df_items.empty:
                 product_ids = ", ".join(map(str, df_items['product_id'].unique().tolist()))
         
@@ -55,7 +74,7 @@ if __name__ == "__main__": # Execute the following block only if the script is r
                 df_inventory_items = client.query(inventory_item_query).to_dataframe()
                 save_to_parquet(df_inventory_items, "raw_inventory_items")
 
-        # [Step 4] Users: get user info that are associated with 5000 orders above
+        # [Step 4] Users: get user info that are in [Step 1] query
         user_ids = ", ".join(map(str, df_orders['user_id'].unique().tolist()))
         users_query = f"SELECT * FROM `bigquery-public-data.thelook_ecommerce.users` WHERE id IN ({user_ids})"
         df_users = client.query(users_query).to_dataframe()
