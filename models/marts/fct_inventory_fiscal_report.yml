@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: fct_inventory_fiscal_report
+    description: >
+      Annual inventory valuation and performance report. 
+      Links Balance Sheet (Inventory Value) and Profit & Loss (COGS) metrics 
+      to provide an audit-ready view of inventory flow per product per fiscal year.
+    config:
+      tags: ['financial', 'inventory_valuation', 'audit_ready']
+    
+    columns:
+      - name: fiscal_year
+        description: "The reporting fiscal year (YYYY)."
+        tests:
+          - not_null
+
+      - name: product_id
+        description: "Unique identifier for the product."
+        tests:
+          - not_null
+
+      - name: period_units_sold
+        description: "Quantity of units sold during the fiscal year."
+
+      - name: period_cogs_amount
+        description: "Total Cost of Goods Sold (COGS) recognized in the P&L for this fiscal year."
+
+      - name: period_revenue
+        description: "Total sales revenue generated from the sold units in this fiscal year."
+
+      - name: beginning_inv_value
+        description: "Beginning inventory value at cost, carried over from the previous year's ending inventory."
+
+      - name: period_purchase_amount
+        description: "Total cost of new inventory purchased/received during the fiscal year."
+
+      - name: ending_gross_inv_value
+        description: "Ending inventory value at cost as of December 31st of the fiscal year."
+
+      - name: ending_net_realizable_value
+        description: "Ending inventory value adjusted by LCM (Lower of Cost or Market) rules."
+
+      - name: audit_check_diff
+        description: >
+          Verification field: (Beginning + Purchase - Ending) - COGS. 
+          Should be 0. Values outside +/- 0.019 indicate data integrity issues or unrecorded shrinkage.
+        tests:
+          - accepted_values:
+              values: [0]
+              severity: warn
+              description: "Warning if reconciliation fails beyond the 0.019 threshold."
+
+      - name: inventory_turnover_ratio
+        description: "Efficiency ratio: COGS / Average Inventory. Higher indicates better performance."
+
+      - name: gross_profit_margin
+        description: "Profitability ratio: (Revenue - COGS) / Revenue."
+
+      - name: inventory_risk_rating
+        description: "Classification of inventory health based on aging (days on hand) and valuation (NRV vs Cost)."
+        tests:
+          - accepted_values:
+              values: ['Healthy', 'Warning: Slow Moving', 'Critical: Obsolete', 'Adjustment Required: NRV < Cost']

@@ -102,9 +102,12 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 
     - **Engineering Value: Future Proof Modeling**: Although the current source data lacks partial refund variety, I designed this logic to be **future-proof**. By simulating these scenarios, I’ve ensured the model is ready for complex, real-world transactional environments—moving beyond simple data transformation to **proactive business logic modeling**.
 
-### 4. Inventory Valuation (FIFO) & Aging
-* **Methodology**: Implemented a **First-In, First-Out (FIFO)** valuation model using SQL Window Functions.
-* **Aging Analysis**: Built models to identify slow-moving inventory and calculate potential Lower of Cost or Market (LCM) adjustments.
+### 4. Financial Inventory Control & Valuation (FIFO)
+* **Methodology (FIFO & Cut-off)**: Implemented a robust **First-In, First-Out (FIFO)** valuation model using SQL Window Functions to track specific `inventory_item_id` lifecycles, ensuring a granular audit trail from inbound to outbound.
+* **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**. 
+* **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` with `current_market_price`. This calculates "Unrealized Valuation Loss" in real-time, preparing the data for Allowance for Inventory write-downs on the Balance Sheet.
+* **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
+* **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
 ---
 
