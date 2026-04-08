@@ -33,5 +33,26 @@ models:
     # Config indicated by + and applies to all files under models/example/
     staging:
       +materialized: view
+      +docs:
+        node_color: "MediumSeaGreen"
+      synth_stg_order_items:
+        +docs:
+          node_color: "#F1C40F"
+    intermediate: 
+      +materialized: table
+      +docs:
+        node_color: "Orange"
     marts:
       +materialized: table
+      +docs:
+        node_color: "RoyalBlue"
+
+seeds:
+  audit_ready_dbt:
+    +docs:
+      node_color: "#E67E22"
+
+tests:
+  audit_ready_dbt:
+    +docs:
+      node_color: "#E74C3C" 

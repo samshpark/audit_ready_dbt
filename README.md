@@ -25,6 +25,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Multi-Environment**: **dbt profiles** (`dbt_profile.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command.
 
 ### 3. Modular Transformation (dbt)
+
+![Data Lineage](./images/lineage_graph.png)
 * **Staging Layer**:
     - 📂 `models/staging/stg_orders.sql`
     - 📂 `models/staging/stg_order_items.sql`
