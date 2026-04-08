@@ -26,6 +26,18 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
+**Visualizing the Audit-Ready Data Pipeline**
+* **Layered Architecture**: Implemented a 3-tier structure (Staging → Intermediate → Marts) to ensure data traceability.
+* **Color-Coded Nodes**:
+    - 🟢 Light Green: Raw Sources
+    - 🟤 Brown: Seeds (Generated synthetic data)
+    - 🟩 MediumSeaGreen: Staging Layer (Initial cleaning and casting)
+    - 🟡 Yellow: Synthetic Test Layer (Partial Refund Scenario injection)
+    - 🟠 Orange: Intermediate Layer
+    - 🔵 RoyalBlue: Final Financial Marts
+    - 🔴 Red: Automated Data Quality Tests
+
+#### Model Directory
 * **Staging Layer**:
     - 📂 `models/staging/stg_orders.sql`
     - 📂 `models/staging/stg_order_items.sql`

@@ -50,7 +50,7 @@ models:
 seeds:
   audit_ready_dbt:
     +docs:
-      node_color: "#E67E22"
+      node_color: "#8D6E63"
 
 tests:
   audit_ready_dbt:
