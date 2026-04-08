@@ -25,7 +25,6 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Multi-Environment**: **dbt profiles** (`dbt_profile.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command.
 
 ### 3. Modular Transformation (dbt)
-
 ![Data Lineage](./images/lineage_graph.png)
 * **Staging Layer**:
     - 📂 `models/staging/stg_orders.sql`
@@ -43,6 +42,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 4. Quality Control
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
+![dbt Test Results](./images/test_results.png)
     - 📂 `models/staging/source.yml`, `synth_stg_order_items.yml`, `fct_order_recon.yml`
     - 📂 `models/intermediate/int_inventory_ledger.yml`
     - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
@@ -111,9 +111,22 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
+#### Model Detail: fct_inventory_fiscal_report
+> Below is the technical documentation of the final audit mart, demonstrating the integration of accounting principles and data engineering.
+
+![Model Metadata](./images/model_header.png)
+* **Metadata & Governance**: Tags (`audit_ready`) and descriptions ensure the model's purpose is transparent for financial stakeholders.
+
+![Financial Columns](./images/model_columns.png)
+* **Accounting Logic Implementation**: Includes granular fields for NRV, LCM, and a dedicated `audit_check_diff` for automated reconciliation.
+
+![Data Controls](./images/model_tests.png)
+* **Automated Internal Controls**: Integrated dbt tests to enforce zero-variance (`audit_check_diff == 0`) and validate inventory health ratings.
+
 ---
 
 ## 5. Engineering Excellence (CPA Insight)
+
 * **Audit Trail:** Every model is documented with metadata to provide a clear path from raw data to final report—essential for financial audits.
 * **Cost-Efficient Pipeline:** By utilizing a **Python-to-DuckDB** ingestion strategy, I reduced warehouse compute costs by 90% during the development phase.
 * **Idempotency:** Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
