@@ -29,6 +29,8 @@ data_cleanse AS (
     SELECT
         COALESCE(inb.inventory_item_id, outb.inventory_item_id) AS inventory_item_id,
         COALESCE(inb.product_id, outb.product_id) AS product_id,
+        inb.product_id AS inbound_product_id, 
+        outb.product_id AS outbound_product_id, 
         inb.product_category,
         inb.product_name,
         inb.product_brand,
@@ -110,8 +112,12 @@ final AS (
         END AS stock_status,
 
         -- Evaluate whether the product_id is a match
-        CASE WHEN product_id <> product_id THEN 'Product Not Match' 
-            ELSE 'Product Match' 
+        CASE
+            WHEN inbound_product_id IS NOT NULL
+                AND outbound_product_id IS NOT NULL
+                AND inbound_product_id <> outbound_product_id
+            THEN 'Product Not Match'
+            ELSE 'Product Match'
         END AS product_match,
         EXTRACT(YEAR FROM outbound_at::timestamp) AS outbound_fiscal_year,
         EXTRACT(YEAR FROM inbound_at::timestamp) AS inbound_fiscal_year
@@ -120,4 +126,3 @@ final AS (
 )
 
 SELECT * FROM final
-ORDER BY product_id

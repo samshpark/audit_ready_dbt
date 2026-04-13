@@ -60,8 +60,7 @@ product_year_flow AS (
         END), 1) AS avg_days_on_hand_at_year_end
 
     FROM years y
-    CROSS JOIN (SELECT DISTINCT product_id, product_name, product_category, product_brand FROM base_ledger) p
-    LEFT JOIN base_ledger l ON l.product_id = p.product_id
+    CROSS JOIN base_ledger l
     GROUP BY 1, 2, 3, 4, 5
 ),
 
@@ -83,7 +82,7 @@ final AS (
         product_brand,
         period_units_sold,
         period_cogs_amount,
-        period_revenue
+        period_revenue,
         beginning_inv_value,
         period_purchase_amount,
         ending_gross_inv_value,
@@ -97,8 +96,10 @@ final AS (
             -- This should ideally be 0. Discrepancies indicate:
                 --   (+) Positive: Inventory Shrinkage (Unrecorded loss, theft, or breakage)
                 --   (-) Negative: Surplus/Ghost Inventory (Unrecorded receipts or COGS overstatement)
+        
         CASE 
             WHEN ABS((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount) <= 0.019 
+            -- Tolerance set to $0.019 to accommodate floating-point rounding
             THEN 0 
             ELSE ROUND((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount, 2)
         END AS audit_check_diff,

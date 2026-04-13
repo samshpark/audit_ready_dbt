@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Cleaned and recast order headers from raw_orders."
+    columns:
+      - name: order_id
+        description: "Primary key for orders (cast to string)"
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Foreign key to stg_users"
+        tests:
+          - not_null
+      - name: order_status
+        description: "Lowercased order status"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['processing', 'shipped', 'complete', 'returned', 'cancelled']
+      - name: user_gender
+        description: "Lowercased gender"
+      - name: created_at
+        description: "Order creation timestamp (UTC)"
+      - name: returned_at
+        description: "Return timestamp (UTC)"
+      - name: shipped_at
+        description: "Shipment timestamp (UTC)"
+      - name: delivered_at
+        description: "Delivery timestamp (UTC)"
+      - name: num_of_item
+        description: "Number of items in the order"
+        tests:
+          - not_null

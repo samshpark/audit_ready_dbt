@@ -5,15 +5,13 @@ WITH reconciled AS (
     SELECT
         order_id,
         user_id,
-        -- All created_at for same order are identical.
-        MIN(created_at) AS order_date,
-        ROUND(SUM(sale_price), 2) AS gross_revenue,
-        ROUND(SUM(CASE WHEN order_item_status = 'returned' THEN sale_price ELSE 0 END), 2) AS refund_amount,
-        COUNT(*) AS total_item_count,
-        SUM(CASE WHEN order_item_status = 'returned' THEN 1 ELSE 0 END) AS total_returned_items
-    FROM {{ ref('stg_order_items') }}
+        first_item_created_at AS order_date,
+        tot_order_amt AS gross_revenue,
+        refund_amount,
+        subledger_item_count AS total_item_count,
+        returned_item_count AS total_returned_items
+    FROM {{ ref('int_order_items_summary') }}
     -- FROM {{ ref('synth_stg_order_items') }} - Used for the testing of the sql for partially refunded scenario
-    GROUP BY 1, 2
 ),
 
 final AS (

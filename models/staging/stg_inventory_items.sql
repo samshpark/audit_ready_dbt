@@ -5,8 +5,8 @@ reformat AS (
     SELECT
         CAST(id AS STRING) AS inventory_item_id, -- make key value integer -> string
         CAST(product_id AS STRING) AS product_id,
-        strftime(CAST(created_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS created_at, -- UTC timestamp
-        strftime(CAST(sold_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS sold_at,
+        CAST(created_at AS TIMESTAMP) AS created_at, -- UTC timestamp
+        CAST(sold_at AS TIMESTAMP) AS sold_at,
         CAST(cost AS DOUBLE) AS cost,
         LOWER(product_category) AS product_category,
         product_name,

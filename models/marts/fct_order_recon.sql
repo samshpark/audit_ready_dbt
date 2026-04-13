@@ -8,13 +8,11 @@ WITH orders AS (
 order_items AS (
     SELECT
         order_id,
-        COUNT(*) AS num_of_item,
-        ROUND(SUM(sale_price), 2) AS tot_order_amt,
-        STRING_AGG(DISTINCT order_item_status) AS order_status
+        subledger_item_count AS num_of_item,
+        tot_order_amt,
+        order_item_status_agg AS order_status
     FROM
-        {{ ref('stg_order_items') }}
-    GROUP BY
-        1
+        {{ ref('int_order_items_summary') }}
 ),
 
 final AS (

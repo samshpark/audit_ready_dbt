@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: int_order_items_summary
+    description: >
+      An order-level summary aggregated from individual order items (stg_order_items).
+      Each row represents one order, consolidating item counts, total sale amounts,
+      return metrics, and status information. This model serves as a reliable
+      sub-ledger for revenue recognition and refund liability reporting.
+
+    config:
+      tags: ['financial', 'order_level', 'audit_ready']
+
+    columns:
+      - name: order_id
+        description: "Primary Key. Unique identifier for each order, aggregated from line-item detail."
+        tests:
+          - unique
+          - not_null
+
+      - name: user_id
+        description: "Foreign Key to the customer who placed the order."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_users')
+              field: user_id
+
+      - name: order_item_status_agg
+        description: >
+          A comma-separated, alphabetically ordered string of all distinct item statuses
+          within the order (e.g., 'complete,returned,shipped'). Useful for quickly
+          identifying mixed-status orders.
+        tests:
+          - not_null
+
+      - name: subledger_item_count
+        description: "The total number of line items (units) within the order."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+                description: "Every order must contain at least one item."
+
+      - name: tot_order_amt
+        description: "The gross total sale amount for the order, rounded to 2 decimal places."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+                description: "Total order amount cannot be negative."
+
+      - name: first_item_created_at
+        description: "The earliest created_at timestamp among all line items in the order."
+        tests:
+          - not_null
+
+      - name: returned_item_count
+        description: "The count of individual items with a status of 'returned' within the order."
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+                description: "Returned item count cannot be negative."
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "<= subledger_item_count"
+                description: "Returned items cannot exceed total items in the order."
+
+      - name: refund_amount
+        description: >
+          The total sale price of all returned items, representing the refund liability
+          for the order. Rounded to 2 decimal places.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+                description: "Refund amount cannot be negative."
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "<= tot_order_amt"
+                description: "Refund amount cannot exceed the gross order total."

@@ -35,6 +35,12 @@ sources:
                     values: ['Processing', 'Shipped', 'Complete', 'Returned', 'Cancelled']
           - name: created_at
             description: "Order created at (timestamp)"
+          - name: shipped_at
+            description: "Order Shipped Date; Null if not shipped"
+          - name: returned_at
+            description: "Order Returned Date; Null if not returned"
+          - name: delivered_at
+            description: "Order Delivered Date; Null if not delivered"
           - name: num_of_item
             description: "Number of items included in an order"
       
