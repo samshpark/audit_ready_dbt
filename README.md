@@ -22,7 +22,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
-* **Multi-Environment**: **dbt profiles** (`dbt_profile.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command.
+* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command.
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
@@ -46,20 +46,32 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `models/staging/stg_inventory_items.sql`
     - 📂 `models/staging/synth_stg_order_items.sql` (**Test Layer**)
 * **Intermediate**: 
+    - 📂 `models/intermediate/int_order_items_summary.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
     - 📂 `models/intermediate/int_inventory_ledger.sql`
 * **Marts (Audit Layer)**:
     - 📂 `models/marts/fct_order_recon.sql`: Master-to-Subledger reconciliation.
     - 📂 `models/marts/fct_revenue.sql`: Accrual-based revenue recognition.
     - 📂 `models/marts/fct_refund_reconciliation.sql`: Linking refunds to original orders.
 
-### 4. Quality Control
+### 4. SCD Type 2 Snapshot (Product Price Tracking)
+* **File**: 📂 `snapshots/scd_products.sql`
+* **Strategy**: `check` — tracks row-level changes on `cost`, `retail_price`, `product_name`, `category` using `dbt snapshot`.
+* **Purpose**: Maintains a full historical record of product price and category changes, enabling point-in-time inventory valuation and audit traceability without overwriting prior states.
+* **Hard Delete Handling**: `invalidate_hard_deletes=True` ensures removed products are flagged rather than silently dropped from history.
+
+### 5. Quality Control
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
 ![dbt Test Results](./images/test_results.png)
-    - 📂 `models/staging/source.yml`, `synth_stg_order_items.yml`, `fct_order_recon.yml`
-    - 📂 `models/intermediate/int_inventory_ledger.yml`
-    - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
-    - 📂 `tests/assert_no_variance_in_order_recon.sql`
-    - 📂 `models/marts/assert_revenue_recognition_logic.yml`
+    * **Model Schema Tests** (column-level constraints & descriptions):
+        - 📂 `models/staging/source.yml`
+        - 📂 `models/staging/stg_orders.yml`, `stg_order_items.yml`, `stg_products.yml`, `stg_users.yml`, `stg_inventory_items.yml`
+        - 📂 `models/staging/synth_stg_order_items.yml`
+        - 📂 `models/intermediate/int_inventory_ledger.yml`, `int_order_items_summary.yml`
+        - 📂 `models/marts/fct_order_recon.yml`, `fct_revenue.yml`, `fct_refund_reconciliation.yml`, `fct_inventory_fiscal_report.yml`
+    * **Custom Assertion Tests** (business-logic validation):
+        - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
+        - 📂 `tests/assert_no_variance_in_order_recon.sql`
+        - 📂 `tests/assert_revenue_recognition_logic.sql`
 
 ---
 
@@ -144,11 +156,11 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Idempotency:** Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 ---
 
-## 6. Reporting Automation & Visualization
-Beyond data modeling, I focused on automating the delivery of financial insights to eliminate manual Excel-based reporting.
+## 6. Roadmap
+The following features are planned for future development:
 
-* **Dynamic Financial Dashboards:** Built an automated P&L dashboard using **Streamlit** that refreshes daily based on dbt Marts.
-* **Self-Service Analytics:** Provided a clean, documented semantic layer so non-technical stakeholders (FP&A, Marketing) can pull reports without SQL.
+* **Dynamic Financial Dashboards:** Automated P&L dashboard using **Streamlit** refreshing daily from dbt Marts.
+* **Self-Service Analytics:** Clean, documented semantic layer so non-technical stakeholders (FP&A, Marketing) can pull reports without SQL.
 * **Anomaly Detection**: Automated notifications for significant financial anomalies (e.g., sudden spikes in return rates).
 
 ## 7. Getting Started
@@ -157,7 +169,7 @@ Beyond data modeling, I focused on automating the delivery of financial insights
 
 1. **Clone the repository**
 ```bash
-git clone [https://github.com/your-id/your-repo-name.git](https://github.com/your-id/your-repo-name.git)
+git clone https://github.com/your-id/your-repo-name.git
 cd your-repo-name
 ```
 
@@ -167,8 +179,8 @@ cd your-repo-name
 python3 -m venv venv
 source venv/bin/activate
 
-# Install all required packages (dbt-duckdb, google-cloud-bigquery, pandas, pyarrow)
-pip install -r requirements.txt
+# Install required packages
+pip install dbt-duckdb dbt-bigquery google-cloud-bigquery pandas pyarrow
 ```
 
 3. Ingest Data from BigQuery
@@ -183,9 +195,10 @@ python scripts/ingest_data.py
 python scripts/create_sample_order_items.py
 ```
 
-5. Run dbt Pipeline (Seed -> Run -> Test)
+5. Run dbt Pipeline (Seed → Snapshot → Run → Test)
 ```bash
 dbt seed
+dbt snapshot
 dbt run
 dbt test
 ```
