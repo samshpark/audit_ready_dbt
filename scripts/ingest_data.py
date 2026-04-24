@@ -1,3 +1,26 @@
+"""
+BigQuery → Local Parquet Ingestion Script
+
+Purpose:
+    Pull a referentially intact subset of the TheLook eCommerce public dataset
+    from BigQuery and persist it as local Parquet files under data/.
+    These files act as the static source layer for the dbt pipeline,
+    replacing a live warehouse connection for local development and portfolio use.
+
+Ingestion strategy (order matters for FK integrity):
+    1. raw_orders          — random sample of 1,000 products → all related orders
+    2. raw_order_items     — all line items for the orders above
+    3. raw_inventory_items — inventory records for the products in those items
+    4. raw_users           — customer profiles for the users in those orders
+    5. raw_products        — product catalog for the products in those items
+
+Run once to seed the data/ directory, then use generate_daily_incremental.py
+to append synthetic daily rows for incremental dbt builds.
+
+Usage:
+    python scripts/ingest_data.py
+"""
+
 import os
 import pandas as pd
 from google.cloud import bigquery

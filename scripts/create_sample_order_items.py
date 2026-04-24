@@ -1,3 +1,26 @@
+"""
+Synthetic Order Items Generator (One-Time Seed)
+
+Purpose:
+    Generate a fixed batch of 5,000 synthetic order items and save them as a
+    dbt seed file (seeds/data_test_order_items.csv). These records are used to
+    test and validate refund reconciliation logic (fct_refund_reconciliation)
+    against controlled edge cases — fully refunded, partially refunded, and
+    no-refund orders — without depending on live data.
+
+Key design decisions:
+    - Negative order IDs / item IDs to avoid collision with real BigQuery records.
+    - Dates fixed to 2026-03 so test results are deterministic across runs.
+    - Refund mix (7% full / 15% partial / 78% none) mirrors realistic return rates.
+
+This is a one-time utility. For daily incremental rows fed into the Airflow
+pipeline, use generate_daily_incremental.py instead.
+
+Usage:
+    python scripts/create_sample_order_items.py
+    dbt seed --select data_test_order_items
+"""
+
 import pandas as pd
 import numpy as np
 import random
