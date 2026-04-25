@@ -1,5 +1,10 @@
--- Save a result as table
-{{ config(materialized = 'table') }}
+{{
+    config(
+        materialized='incremental',
+        unique_key='order_id',
+        incremental_strategy='merge'
+    )
+}}
 
 WITH reconciled AS (
     SELECT
@@ -11,6 +16,10 @@ WITH reconciled AS (
         subledger_item_count AS total_item_count,
         returned_item_count AS total_returned_items
     FROM {{ ref('int_order_items_summary') }}
+    {% if is_incremental() %}
+    -- Only process orders touched by the most recent int_order_items_summary incremental run
+    WHERE dbt_updated_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+    {% endif %}
     -- FROM {{ ref('synth_stg_order_items') }} - Used for the testing of the sql for partially refunded scenario
 ),
 

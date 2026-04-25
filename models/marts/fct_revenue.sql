@@ -1,5 +1,10 @@
--- Save as result as table
-{{ config(materialized = 'table') }}
+{{
+    config(
+        materialized='incremental',
+        unique_key='order_id',
+        incremental_strategy='merge'
+    )
+}}
 
 WITH orders AS (
     SELECT * FROM {{ ref('stg_orders') }}
@@ -22,15 +27,15 @@ final AS (
         COALESCE(oi.user_id, o.user_id) AS user_id,
         COALESCE(oi.order_status, o.order_status) AS order_status,
         o.created_at,
-        o.shipped_at, 
-        CASE 
+        o.shipped_at,
+        CASE
             WHEN o.shipped_at IS NOT NULL THEN oi.tot_order_amt
-            ELSE 0 
+            ELSE 0
         END AS recognized_revenue,
         oi.tot_order_amt AS gross_revenue,
         COALESCE(oi.num_of_item, o.num_of_item) AS total_item_count,
-        CASE 
-            WHEN o.order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER' 
+        CASE
+            WHEN o.order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
             WHEN oi.order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
             ELSE 'MATCHED'
         END as data_integrity_status,
@@ -45,3 +50,10 @@ final AS (
 )
 
 SELECT * FROM final
+{% if is_incremental() %}
+-- Only process orders touched by the most recent int_order_items_summary incremental run
+WHERE order_id IN (
+    SELECT order_id FROM {{ ref('int_order_items_summary') }}
+    WHERE dbt_updated_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+)
+{% endif %}
