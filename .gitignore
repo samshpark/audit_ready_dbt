@@ -16,3 +16,5 @@ venv/
 
 models/marts/test.sql
 dbt_internal_packages/
+
+notebook/practice.ipynb
