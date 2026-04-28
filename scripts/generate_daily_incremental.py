@@ -71,6 +71,8 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
             p=[0.07, 0.15, 0.78],
         )
         items_in_order = random.randint(1, 3)
+        if order_type == "PARTIALLY REFUNDED":
+            items_in_order = max(items_in_order, 2)
         shipped_at     = order_created_at + timedelta(hours=random.randint(24, 48))
         delivered_at   = shipped_at + timedelta(hours=random.randint(24, 72))
 

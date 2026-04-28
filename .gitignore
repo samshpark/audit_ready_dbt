@@ -14,6 +14,10 @@ dev.duckdb
 .DS_Store
 venv/
 
+# Python cache
+__pycache__/
+*.pyc
+
 models/marts/test.sql
 dbt_internal_packages/
 
