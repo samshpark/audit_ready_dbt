@@ -4,7 +4,7 @@
 ## Input Prompt:
 Please conduct a deep-dive analysis of my current dbt project structure and modeling architecture based on Analytics Engineering Best Practices. Focus your review on the following five points and provide specific code examples where improvements are needed:
 
-DAG Structure & Layering: Is the staging -> intermediate -> marts flow clear? Verify if source data is sufficiently cleaned in the staging layer and check for any redundant business logic within the marts layer.
+DAG Structure & Layering: Is the staging -> inter숮mediate -> marts flow clear? Verify if source data is sufficiently cleaned in the staging layer and check for any redundant business logic within the marts layer.
 
 Audit-ready Integrity: Given that this project handles financial data, please ensure that primary key validations and tests are appropriately implemented across each layer to prevent data gaps or duplication.
 
