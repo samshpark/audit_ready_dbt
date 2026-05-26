@@ -39,15 +39,19 @@ product_year_flow AS (
             THEN l.historical_unit_cost ELSE 0 END), 2) AS ending_gross_inv_value,
 
         -- [LCM (Low Cost Market) & NRV (Net realizable value)]: as of the fiscal year end
-        ROUND(SUM(CASE 
-            WHEN l.inbound_fiscal_year <= y.fiscal_year 
-            AND (l.outbound_fiscal_year IS NULL OR l.outbound_fiscal_year > y.fiscal_year) 
-            THEN l.inventory_valuation_loss ELSE 0 END), 2) AS ending_allowance_lcm,
+        -- Uses period-end market price from scd_products snapshot (fiscal year Dec 31),
+        -- falling back to the inbound-time price from stg_inventory_items if no snapshot record exists.
+        ROUND(SUM(CASE
+            WHEN l.inbound_fiscal_year <= y.fiscal_year
+            AND (l.outbound_fiscal_year IS NULL OR l.outbound_fiscal_year > y.fiscal_year)
+            THEN GREATEST(0, l.historical_unit_cost - LEAST(l.historical_unit_cost, COALESCE(scd.retail_price, l.current_market_price)))
+            ELSE 0 END), 2) AS ending_allowance_lcm,
 
-        ROUND(SUM(CASE 
-            WHEN l.inbound_fiscal_year <= y.fiscal_year 
-            AND (l.outbound_fiscal_year IS NULL OR l.outbound_fiscal_year > y.fiscal_year) 
-            THEN l.lcm_unit_valuation ELSE 0 END), 2) AS ending_net_realizable_value,
+        ROUND(SUM(CASE
+            WHEN l.inbound_fiscal_year <= y.fiscal_year
+            AND (l.outbound_fiscal_year IS NULL OR l.outbound_fiscal_year > y.fiscal_year)
+            THEN LEAST(l.historical_unit_cost, COALESCE(scd.retail_price, l.current_market_price))
+            ELSE 0 END), 2) AS ending_net_realizable_value,
 
         -- [Period Purchase Amount]: for the fiscal year
         ROUND(SUM(CASE WHEN l.inbound_fiscal_year = y.fiscal_year THEN l.historical_unit_cost ELSE 0 END), 2) AS period_purchase_amount,
@@ -61,6 +65,10 @@ product_year_flow AS (
 
     FROM years y
     CROSS JOIN base_ledger l
+    LEFT JOIN {{ ref('scd_products') }} scd
+        ON  l.product_id = scd.product_id
+        AND CAST(y.fiscal_year || '-12-31' AS DATE) >= scd.dbt_valid_from
+        AND (scd.dbt_valid_to IS NULL OR CAST(y.fiscal_year || '-12-31' AS DATE) < scd.dbt_valid_to)
     GROUP BY 1, 2, 3, 4, 5
 ),
 
@@ -97,10 +105,12 @@ final AS (
                 --   (+) Positive: Inventory Shrinkage (Unrecorded loss, theft, or breakage)
                 --   (-) Negative: Surplus/Ghost Inventory (Unrecorded receipts or COGS overstatement)
         
-        CASE 
-            WHEN ABS((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount) <= 0.019 
-            -- Tolerance set to $0.019 to accommodate floating-point rounding
-            THEN 0 
+        CASE
+            WHEN ABS((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount) <= 0.019
+            -- Tolerance of $0.019 accounts for floating-point rounding error accumulated from
+            -- ROUND(..., 2) applied to individual item-level costs across multiple aggregations.
+            -- Any variance exceeding this threshold is a real discrepancy and flagged for investigation.
+            THEN 0
             ELSE ROUND((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount, 2)
         END AS audit_check_diff,
         

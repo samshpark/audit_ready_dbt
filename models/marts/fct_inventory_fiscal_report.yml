@@ -44,8 +44,18 @@ models:
       - name: ending_gross_inv_value
         description: "Ending inventory value at cost as of December 31st of the fiscal year."
 
+      - name: ending_allowance_lcm
+        description: >
+          Allowance for inventory write-down under LCM rules: historical cost minus period-end NRV.
+          Represents the balance sheet contra-asset (Allowance for Inventory Valuation).
+          Market price is sourced from scd_products at fiscal year-end, not at inbound time.
+
       - name: ending_net_realizable_value
-        description: "Ending inventory value adjusted by LCM (Lower of Cost or Market) rules."
+        description: >
+          Ending inventory value after LCM (Lower of Cost or Market) adjustment.
+          Market price is sourced from the scd_products snapshot at fiscal year-end (Dec 31),
+          ensuring valuation reflects actual period-end market conditions rather than the price
+          frozen at inbound receipt. Falls back to inbound-time price if no snapshot record exists.
 
       - name: audit_check_diff
         description: >
