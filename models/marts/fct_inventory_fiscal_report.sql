@@ -60,15 +60,15 @@ product_year_flow AS (
         ROUND(AVG(CASE 
             WHEN l.inbound_fiscal_year <= y.fiscal_year 
             AND (l.outbound_fiscal_year IS NULL OR l.outbound_fiscal_year > y.fiscal_year) 
-            THEN (CAST(y.fiscal_year || '-12-31' AS DATE) - CAST(l.inbound_at AS DATE)) -- fiscal year end
+            THEN ({{ fiscal_year_end('y.fiscal_year') }} - CAST(l.inbound_at AS DATE))
         END), 1) AS avg_days_on_hand_at_year_end
 
     FROM years y
     CROSS JOIN base_ledger l
     LEFT JOIN {{ ref('scd_products') }} scd
         ON  l.product_id = scd.product_id
-        AND CAST(y.fiscal_year || '-12-31' AS DATE) >= scd.dbt_valid_from
-        AND (scd.dbt_valid_to IS NULL OR CAST(y.fiscal_year || '-12-31' AS DATE) < scd.dbt_valid_to)
+        AND {{ fiscal_year_end('y.fiscal_year') }} >= scd.dbt_valid_from
+        AND (scd.dbt_valid_to IS NULL OR {{ fiscal_year_end('y.fiscal_year') }} < scd.dbt_valid_to)
     GROUP BY 1, 2, 3, 4, 5
 ),
 

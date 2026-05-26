@@ -81,9 +81,9 @@ final AS (
         CASE 
             WHEN inbound_at IS NULL THEN NULL 
             WHEN outbound_at IS NOT NULL 
-            THEN DATEDIFF('day', CAST(inbound_at AS DATE), CAST(outbound_at AS DATE))
+            THEN {{ datediff_days('inbound_at', 'outbound_at') }}
             -- 0 if future inbound
-            ELSE GREATEST(DATEDIFF('day', CAST(inbound_at AS DATE), CURRENT_DATE), 0)
+            ELSE GREATEST({{ datediff_days('inbound_at', 'CURRENT_DATE') }}, 0)
         END AS days_in_inventory,
 
         CASE 

@@ -53,6 +53,22 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `models/marts/fct_revenue.sql`: Accrual-based revenue recognition.
     - 📂 `models/marts/fct_refund_reconciliation.sql`: Linking refunds to original orders.
 
+#### Jinja Macros
+Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
+
+| Macro | Usage | Purpose |
+|---|---|---|
+| `fiscal_year_end(year_col)` | `fct_inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE` type for period-end valuation and SCD joins |
+| `datediff_days(start, end)` | `int_inventory_ledger` (×2) | Calculates day difference between two date columns, used for inventory aging and velocity buckets |
+
+```sql
+-- Example: fiscal_year_end macro in use
+LEFT JOIN {{ ref('scd_products') }} scd
+    ON  l.product_id = scd.product_id
+    AND {{ fiscal_year_end('y.fiscal_year') }} >= scd.dbt_valid_from
+    AND (scd.dbt_valid_to IS NULL OR {{ fiscal_year_end('y.fiscal_year') }} < scd.dbt_valid_to)
+```
+
 ### 4. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`
 * **Strategy**: `check` — tracks row-level changes on `cost`, `retail_price`, `product_name`, `category` using `dbt snapshot`.
@@ -131,7 +147,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 ### 4. Financial Inventory Control & Valuation (FIFO)
 * **Methodology (FIFO & Cut-off)**: Implemented a robust **First-In, First-Out (FIFO)** valuation model using SQL Window Functions to track specific `inventory_item_id` lifecycles, ensuring a granular audit trail from inbound to outbound.
 * **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**. 
-* **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` with `current_market_price`. This calculates "Unrealized Valuation Loss" in real-time, preparing the data for Allowance for Inventory write-downs on the Balance Sheet.
+* **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` against the **period-end market price** sourced from the `scd_products` Type 2 snapshot (effective as of December 31st of each fiscal year). This ensures the LCM write-down reflects actual year-end market conditions — not the price frozen at inbound receipt — calculating the correct "Allowance for Inventory Valuation" for Balance Sheet reporting.
 * **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
@@ -169,8 +185,8 @@ The following features are planned for future development:
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/your-id/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/samshpark/audit_ready_dbt.git
+cd audit_ready_dbt
 ```
 
 2. Setup Virtual Environment & Install dependencies
