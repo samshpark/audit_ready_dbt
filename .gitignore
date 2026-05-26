@@ -11,6 +11,9 @@ credentials/
 profiles.yml
 dev.duckdb
 
+# Raw data files - regenerate via scripts/ingest_data.py or generate_daily_incremental.py
+data/*.parquet
+
 .DS_Store
 venv/
 
