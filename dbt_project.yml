@@ -35,9 +35,11 @@ models:
       +materialized: view
       +docs:
         node_color: "MediumSeaGreen"
-      synth_stg_order_items:
-        +docs:
-          node_color: "#F1C40F"
+    testing:
+      +materialized: view
+      +tags: ['synthetic', 'test-fixture']
+      +docs:
+        node_color: "#F1C40F"
     intermediate: 
       +materialized: table
       +docs:
