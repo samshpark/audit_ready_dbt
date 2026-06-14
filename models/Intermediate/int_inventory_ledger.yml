@@ -23,7 +23,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_products')
+              to: ref('stg_thelook_ecommerce__products')
               field: product_id
 
       - name: product_category

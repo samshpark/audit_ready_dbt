@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: synth_stg_order_items
+  - name: seed_order_items
     description: "Sample Data created from python code"
     columns:
       - name: order_item_id

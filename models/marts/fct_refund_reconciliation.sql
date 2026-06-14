@@ -20,7 +20,7 @@ WITH reconciled AS (
     -- Only process orders touched by the most recent int_order_items_summary incremental run
     WHERE dbt_updated_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
     {% endif %}
-    -- FROM {{ ref('synth_stg_order_items') }} - Used for the testing of the sql for partially refunded scenario
+    -- FROM {{ ref('seed_order_items') }} - Used for the testing of the sql for partially refunded scenario
 ),
 
 final AS (

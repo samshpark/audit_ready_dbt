@@ -7,14 +7,14 @@
 }}
 
 WITH order_items AS (
-    SELECT * FROM {{ ref('stg_order_items') }}
+    SELECT * FROM {{ ref('stg_thelook_ecommerce__order_items') }}
     {% if is_incremental() %}
     -- Lookback window: re-process any order touched in the last 7 days.
     -- Subquery pulls ALL items for those orders so aggregates stay correct.
     -- returned_at filter catches refunds that arrive days/weeks after the original order.
     WHERE order_id IN (
         SELECT DISTINCT order_id
-        FROM {{ ref('stg_order_items') }}
+        FROM {{ ref('stg_thelook_ecommerce__order_items') }}
         WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
            OR returned_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
     )

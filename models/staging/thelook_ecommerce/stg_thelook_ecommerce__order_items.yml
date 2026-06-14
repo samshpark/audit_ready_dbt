@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_order_items
+  - name: stg_thelook_ecommerce__order_items
     description: "Cleaned and recast individual order line items from raw_order_items."
     columns:
       - name: order_item_id
@@ -10,19 +10,19 @@ models:
           - unique
           - not_null
       - name: order_id
-        description: "Foreign key to stg_orders"
+        description: "Foreign key to stg_thelook_ecommerce__orders"
         tests:
           - not_null
       - name: user_id
-        description: "Foreign key to stg_users"
+        description: "Foreign key to stg_thelook_ecommerce__users"
         tests:
           - not_null
       - name: product_id
-        description: "Foreign key to stg_products"
+        description: "Foreign key to stg_thelook_ecommerce__products"
         tests:
           - not_null
       - name: inventory_item_id
-        description: "Foreign key to stg_inventory_items"
+        description: "Foreign key to stg_thelook_ecommerce__inventory_items"
       - name: order_item_status
         description: "Lowercased order item status"
         tests:

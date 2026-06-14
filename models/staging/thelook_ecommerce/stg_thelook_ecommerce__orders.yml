@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_orders
+  - name: stg_thelook_ecommerce__orders
     description: "Cleaned and recast order headers from raw_orders."
     columns:
       - name: order_id
@@ -10,7 +10,7 @@ models:
           - unique
           - not_null
       - name: user_id
-        description: "Foreign key to stg_users"
+        description: "Foreign key to stg_thelook_ecommerce__users"
         tests:
           - not_null
       - name: order_status

@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_inventory_items
+  - name: stg_thelook_ecommerce__inventory_items
     description: "Cleaned and recast inventory items from raw_inventory_items."
     columns:
       - name: inventory_item_id
@@ -10,7 +10,7 @@ models:
           - unique
           - not_null
       - name: product_id
-        description: "Foreign key to stg_products"
+        description: "Foreign key to stg_thelook_ecommerce__products"
         tests:
           - not_null
       - name: created_at

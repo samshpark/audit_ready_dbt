@@ -7,7 +7,7 @@
 }}
 
 WITH orders AS (
-    SELECT * FROM {{ ref('stg_orders') }}
+    SELECT * FROM {{ ref('stg_thelook_ecommerce__orders') }}
 ),
 
 order_items AS (

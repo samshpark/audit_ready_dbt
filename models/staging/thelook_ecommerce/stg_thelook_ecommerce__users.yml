@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_users
+  - name: stg_thelook_ecommerce__users
     description: "Cleaned and recast user profiles from raw_users."
     columns:
       - name: user_id

@@ -3,7 +3,7 @@ version: 2
 models:
   - name: int_order_items_summary
     description: >
-      An order-level summary aggregated from individual order items (stg_order_items).
+      An order-level summary aggregated from individual order items (stg_thelook_ecommerce__order_items).
       Each row represents one order, consolidating item counts, total sale amounts,
       return metrics, and status information. This model serves as a reliable
       sub-ledger for revenue recognition and refund liability reporting.
@@ -23,7 +23,7 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_users')
+              to: ref('stg_thelook_ecommerce__users')
               field: user_id
 
       - name: order_item_status_agg

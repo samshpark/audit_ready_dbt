@@ -10,7 +10,7 @@ WITH inbound AS (
         product_retail_price,
         product_department
     FROM
-        {{ ref('stg_inventory_items') }}
+        {{ ref('stg_thelook_ecommerce__inventory_items') }}
 ),
 
 outbound AS (
@@ -20,7 +20,7 @@ outbound AS (
         shipped_at AS outbound_at,
         sale_price
     FROM
-        {{ ref('stg_order_items') }}
+        {{ ref('stg_thelook_ecommerce__order_items') }}
     WHERE
         order_item_status NOT IN ('cancelled', 'returned', 'processing') -- only include 'shipped' & 'complete'
 ),

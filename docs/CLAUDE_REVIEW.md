@@ -116,7 +116,7 @@ END AS product_match
 
 **Problem:**
 
-All three mart models independently aggregate `stg_order_items` to the order level, duplicating the same grouping and aggregation logic. Since all marts are materialized as tables, the `stg_order_items` view is scanned and fully aggregated three separate times per `dbt run`.
+All three mart models independently aggregate `stg_thelook_ecommerce__order_items` to the order level, duplicating the same grouping and aggregation logic. Since all marts are materialized as tables, the `stg_thelook_ecommerce__order_items` view is scanned and fully aggregated three separate times per `dbt run`.
 
 ```sql
 -- fct_revenue.sql (independent aggregation)
@@ -125,7 +125,7 @@ order_items AS (
            STRING_AGG(DISTINCT order_item_status) AS order_status,
            COUNT(*)                               AS num_of_item,
            ROUND(SUM(sale_price), 2)              AS tot_order_amt
-    FROM {{ ref('stg_order_items') }}
+    FROM {{ ref('stg_thelook_ecommerce__order_items') }}
     GROUP BY 1, 2
 )
 
@@ -135,7 +135,7 @@ order_items AS (
            COUNT(*)                               AS num_of_item,
            ROUND(SUM(sale_price), 2)              AS tot_order_amt,
            STRING_AGG(DISTINCT order_item_status) AS order_status
-    FROM {{ ref('stg_order_items') }}
+    FROM {{ ref('stg_thelook_ecommerce__order_items') }}
     GROUP BY 1
 )
 ```
@@ -145,7 +145,7 @@ order_items AS (
 ```sql
 -- New file: models/intermediate/int_order_items_summary.sql
 WITH order_items AS (
-    SELECT * FROM {{ ref('stg_order_items') }}
+    SELECT * FROM {{ ref('stg_thelook_ecommerce__order_items') }}
 ),
 
 final AS (
@@ -168,7 +168,7 @@ SELECT * FROM final
 ```
 
 **Impact:**
-- Eliminates three independent full scans of `stg_order_items`.
+- Eliminates three independent full scans of `stg_thelook_ecommerce__order_items`.
 - Ensures consistent aggregation logic across all downstream mart models.
 - Simplifies future maintenance: a change to the aggregation logic (e.g., adding a new status) only needs to be made in one place.
 
@@ -178,16 +178,16 @@ SELECT * FROM final
 
 ### Overall Assessment: Sound Architecture with Structural Gaps in the Order Domain
 
-The three-layer architecture is correctly implemented for the inventory domain: `stg_inventory_items` feeds `int_inventory_ledger`, which feeds `fct_inventory_fiscal_report`. This pattern — where raw data is cleaned in staging, enriched with business logic in an intermediate model, and then surfaced as a financial fact in the mart — is the correct Analytics Engineering approach.
+The three-layer architecture is correctly implemented for the inventory domain: `stg_thelook_ecommerce__inventory_items` feeds `int_inventory_ledger`, which feeds `fct_inventory_fiscal_report`. This pattern — where raw data is cleaned in staging, enriched with business logic in an intermediate model, and then surfaced as a financial fact in the mart — is the correct Analytics Engineering approach.
 
-However, the order/revenue domain bypasses the intermediate layer entirely. `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` all read directly from `stg_orders` and `stg_order_items`, performing their own aggregations inline. This creates the DRY violation described in Priority 3 above and makes the DAG asymmetric.
+However, the order/revenue domain bypasses the intermediate layer entirely. `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` all read directly from `stg_thelook_ecommerce__orders` and `stg_thelook_ecommerce__order_items`, performing their own aggregations inline. This creates the DRY violation described in Priority 3 above and makes the DAG asymmetric.
 
 **Recommended DAG (Order Domain):**
 
 ```
-stg_orders ──────────┐
+stg_thelook_ecommerce__orders ──────────┐
                      ├──→ int_order_items_summary ──→ fct_revenue
-stg_order_items ─────┤                           ──→ fct_order_recon
+stg_thelook_ecommerce__order_items ─────┤                           ──→ fct_order_recon
                                                   ──→ fct_refund_reconciliation
 ```
 
@@ -196,7 +196,7 @@ stg_order_items ─────┤                           ──→ fct_order
 All staging models use DuckDB's `strftime()` function to format timestamps, which returns a `VARCHAR` string rather than a `TIMESTAMP` type:
 
 ```sql
--- Current: returns VARCHAR (stg_orders.sql)
+-- Current: returns VARCHAR (stg_thelook_ecommerce__orders.sql)
 strftime(CAST(created_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS created_at
 ```
 
@@ -225,16 +225,16 @@ CAST(delivered_at AS TIMESTAMP) AS delivered_at,
 
 ### Gap 1: Staging Layer Has No Tests or Documentation
 
-None of the staging models (`stg_orders`, `stg_order_items`, `stg_inventory_items`, etc.) have accompanying `.yml` files. This creates a blind spot: source tests verify the raw data, and intermediate tests verify the enriched data, but no tests confirm that the staging transformations (type casting, lowercasing, timestamp formatting) produced correct results.
+None of the staging models (`stg_thelook_ecommerce__orders`, `stg_thelook_ecommerce__order_items`, `stg_thelook_ecommerce__inventory_items`, etc.) have accompanying `.yml` files. This creates a blind spot: source tests verify the raw data, and intermediate tests verify the enriched data, but no tests confirm that the staging transformations (type casting, lowercasing, timestamp formatting) produced correct results.
 
 A representative example of the recommended staging YAML:
 
 ```yaml
-# models/staging/stg_order_items.yml
+# models/staging/stg_thelook_ecommerce__order_items.yml
 version: 2
 
 models:
-  - name: stg_order_items
+  - name: stg_thelook_ecommerce__order_items
     description: >
       Standardized order line items sourced from raw_order_items.
       Applies type casting (INTEGER → STRING for all IDs, DOUBLE for sale_price),
@@ -248,11 +248,11 @@ models:
           - not_null
 
       - name: order_id
-        description: "Foreign key to stg_orders."
+        description: "Foreign key to stg_thelook_ecommerce__orders."
         tests:
           - not_null
           - relationships:
-              to: ref('stg_orders')
+              to: ref('stg_thelook_ecommerce__orders')
               field: order_id
 
       - name: sale_price
@@ -310,7 +310,7 @@ columns:
             expression: ">= 0"
 
   - name: gross_revenue
-    description: "Total order value aggregated from the subledger (stg_order_items), independent of shipment status."
+    description: "Total order value aggregated from the subledger (stg_thelook_ecommerce__order_items), independent of shipment status."
 
   - name: created_at
     description: "Order creation timestamp (UTC). Used as the reference point for cut-off period risk assessment."
@@ -352,9 +352,9 @@ ORDER BY product_id  -- No semantic guarantee; adds unnecessary sort overhead
 
 `ORDER BY` in a model materialized as a `table` does not guarantee row order for downstream consumers (SQL tables are inherently unordered sets). This clause should be removed; any required ordering should be applied at query time by the BI tool or the consuming model.
 
-### Issue 3: Redundant Full Scans of `stg_order_items`
+### Issue 3: Redundant Full Scans of `stg_thelook_ecommerce__order_items`
 
-Because `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` are all materialized as separate tables, each `dbt run` executes three independent full scans of the `stg_order_items` view. Consolidating the shared aggregation into `int_order_items_summary` (see Priority 3) reduces this to a single scan, with the result materialized as a table for reuse.
+Because `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` are all materialized as separate tables, each `dbt run` executes three independent full scans of the `stg_thelook_ecommerce__order_items` view. Consolidating the shared aggregation into `int_order_items_summary` (see Priority 3) reduces this to a single scan, with the result materialized as a table for reuse.
 
 ### Incremental Model Evaluation
 
@@ -422,7 +422,7 @@ The model YAML contains only column tests with no model-level `description` fiel
 
 **Rationale:**
 
-In `int_inventory_ledger.sql`, LCM (Lower of Cost or Market) valuation uses `product_retail_price` from `stg_inventory_items`, which captures the retail price at the time of inventory receipt. However, the current approach has no mechanism to query what the retail price was as of a specific reporting date, which is required for precise period-end valuation adjustments.
+In `int_inventory_ledger.sql`, LCM (Lower of Cost or Market) valuation uses `product_retail_price` from `stg_thelook_ecommerce__inventory_items`, which captures the retail price at the time of inventory receipt. However, the current approach has no mechanism to query what the retail price was as of a specific reporting date, which is required for precise period-end valuation adjustments.
 
 A snapshot on `raw_products` would maintain a Type 2 SCD (Slowly Changing Dimension) history of price changes, enabling more accurate historical LCM calculations.
 
@@ -466,13 +466,13 @@ The `sold_at` field on `raw_inventory_items` changes when an item transitions fr
 |----------|----------|-------|------|------|
 | 🔴 Critical | Bug | Missing comma causes `beginning_inv_value` to be silently dropped from output | `fct_inventory_fiscal_report.sql` | 87 |
 | 🔴 High | Bug | `product_match` self-comparison always returns 'Match'; internal control is non-functional | `int_inventory_ledger.sql` | 113 |
-| 🟠 High | Architecture | Three mart models independently aggregate `stg_order_items`; no intermediate model | `fct_revenue.sql`, `fct_order_recon.sql`, `fct_refund_reconciliation.sql` | — |
+| 🟠 High | Architecture | Three mart models independently aggregate `stg_thelook_ecommerce__order_items`; no intermediate model | `fct_revenue.sql`, `fct_order_recon.sql`, `fct_refund_reconciliation.sql` | — |
 | 🟠 High | Data Quality | No YAML tests or documentation exist for any staging model | `stg_*.sql` | — |
 | 🟡 Medium | Data Quality | Composite PK test `(fiscal_year, product_id)` missing on `fct_inventory_fiscal_report` | `fct_inventory_fiscal_report.yml` | — |
 | 🟡 Medium | Data Quality | `fct_revenue.yml` missing descriptions and tests for seven core financial columns | `fct_revenue.yml` | — |
 | 🟡 Medium | Data Quality | `fct_order_recon.yml` missing model-level description and column descriptions | `fct_order_recon.yml` | — |
 | 🟡 Medium | Performance | Redundant `ORDER BY` in a TABLE-materialized intermediate model | `int_inventory_ledger.sql` | 123 |
-| 🟡 Medium | Performance | Three independent full scans of `stg_order_items` per dbt run | Multiple mart models | — |
+| 🟡 Medium | Performance | Three independent full scans of `stg_thelook_ecommerce__order_items` per dbt run | Multiple mart models | — |
 | 🟢 Low | Convention | `strftime()` in staging returns VARCHAR; downstream re-casting is error-prone | All `stg_*.sql` | — |
 | 🟢 Low | Convention | Inline `{{ config(materialized='table') }}` is redundant with `dbt_project.yml` | `fct_revenue.sql`, `fct_order_recon.sql` | — |
 | 🟢 Low | Convention | Tolerance value `0.019` is a magic number without documented derivation | `fct_inventory_fiscal_report.sql` | 101 |

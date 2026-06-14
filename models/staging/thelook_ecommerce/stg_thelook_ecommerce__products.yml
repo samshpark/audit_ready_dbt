@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: stg_products
+  - name: stg_thelook_ecommerce__products
     description: "Cleaned and recast product catalog from raw_products."
     columns:
       - name: product_id

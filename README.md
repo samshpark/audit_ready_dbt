@@ -43,13 +43,13 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 #### Model Directory
 * **Staging Layer**:
-    - 📂 `models/staging/thelook_ecommerce/stg_orders.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_order_items.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_products.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_users.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_inventory_items.sql`
+    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__orders.sql`
+    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__order_items.sql`
+    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__products.sql`
+    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__users.sql`
+    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__inventory_items.sql`
 * **Testing Layer**:
-    - 📂 `models/testing/synth_stg_order_items.sql`
+    - 📂 `models/testing/seed_order_items.sql`
 * **Intermediate**: 
     - 📂 `models/intermediate/int_order_items_summary.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
     - 📂 `models/intermediate/int_inventory_ledger.sql`
@@ -97,8 +97,8 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ![dbt Test Results](./images/test_results.png)
     * **Model Schema Tests** (column-level constraints & descriptions):
         - 📂 `models/staging/thelook_ecommerce/__thelook_ecommerce__sources.yml`
-        - 📂 `models/staging/thelook_ecommerce/stg_orders.yml`, `stg_order_items.yml`, `stg_products.yml`, `stg_users.yml`, `stg_inventory_items.yml`
-        - 📂 `models/testing/synth_stg_order_items.yml`
+        - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__orders.yml`, `stg_thelook_ecommerce__order_items.yml`, `stg_thelook_ecommerce__products.yml`, `stg_thelook_ecommerce__users.yml`, `stg_thelook_ecommerce__inventory_items.yml`
+        - 📂 `models/testing/seed_order_items.yml`
         - 📂 `models/intermediate/int_inventory_ledger.yml`, `int_order_items_summary.yml`
         - 📂 `models/marts/fct_order_recon.yml`, `fct_revenue.yml`, `fct_refund_reconciliation.yml`, `fct_inventory_fiscal_report.yml`
     * **Custom Assertion Tests** (business-logic validation):
