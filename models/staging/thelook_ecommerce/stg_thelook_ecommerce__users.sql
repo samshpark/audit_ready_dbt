@@ -1,9 +1,9 @@
 WITH source AS (
-    SELECT * FROM {{source('thelook_ecommerce', 'raw_users')}}
+    SELECT * FROM {{ source('thelook_ecommerce', 'raw_users') }}
 ),
-reformat AS (
+renamed AS (
     SELECT
-        CAST(id as string) AS user_id, -- make key value integer -> string
+        CAST(id AS STRING) AS user_id,
         LOWER(first_name) AS first_name,
         LOWER(last_name) AS last_name,
         LOWER(email) AS email,
@@ -17,9 +17,9 @@ reformat AS (
         latitude,
         longitude,
         LOWER(traffic_source) AS traffic_source,
-        strftime(CAST(created_at AS TIMESTAMP), '%Y-%m-%d %H:%M:%S') AS created_at,
+        CAST(created_at AS TIMESTAMP) AS created_at,
         user_geom
     FROM
         source
 )
-SELECT * FROM reformat
+SELECT * FROM renamed

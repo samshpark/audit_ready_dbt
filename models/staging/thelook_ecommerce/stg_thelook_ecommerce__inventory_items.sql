@@ -1,11 +1,11 @@
 WITH source AS (
-    SELECT * FROM {{source('thelook_ecommerce', 'raw_inventory_items')}}
+    SELECT * FROM {{ source('thelook_ecommerce', 'raw_inventory_items') }}
 ),
-reformat AS (
+renamed AS (
     SELECT
-        CAST(id AS STRING) AS inventory_item_id, -- make key value integer -> string
+        CAST(id AS STRING) AS inventory_item_id,
         CAST(product_id AS STRING) AS product_id,
-        CAST(created_at AS TIMESTAMP) AS created_at, -- UTC timestamp
+        CAST(created_at AS TIMESTAMP) AS created_at,
         CAST(sold_at AS TIMESTAMP) AS sold_at,
         CAST(cost AS DOUBLE) AS cost,
         LOWER(product_category) AS product_category,
@@ -18,4 +18,4 @@ reformat AS (
     FROM
         source
 )
-SELECT * FROM reformat
+SELECT * FROM renamed

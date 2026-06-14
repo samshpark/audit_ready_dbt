@@ -41,3 +41,6 @@ models:
         description: "Sale price of the item"
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"

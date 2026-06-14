@@ -15,6 +15,8 @@ models:
         description: "Lowercased last name"
       - name: email
         description: "Lowercased email address"
+        tests:
+          - not_null
       - name: age
         description: "User age"
       - name: gender
