@@ -51,15 +51,15 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Testing Layer**:
     - 📂 `models/testing/seed_order_items.sql`
 * **Intermediate**: 
-    - 📂 `models/intermediate/int_order_items_summary.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
-    - 📂 `models/intermediate/int_inventory_ledger.sql`
+    - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
+    - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`
 * **Marts (Audit Layer)**:
     - 📂 `models/marts/fct_order_recon.sql`: Master-to-Subledger reconciliation.
     - 📂 `models/marts/fct_revenue.sql`: Accrual-based revenue recognition.
     - 📂 `models/marts/fct_refund_reconciliation.sql`: Linking refunds to original orders.
     - 📂 `models/marts/fct_inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, and turnover ratios by product and fiscal year.
 
-> **Incremental Strategy**: `int_order_items_summary`, `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` are materialized as **incremental models** (`merge` strategy) with a 7-day lookback window to capture late-arriving refunds. `fct_inventory_fiscal_report` is a full-refresh model — cross-year LAG calculations require a complete recalculation each run.
+> **Incremental Strategy**: `int_order_items_aggregated`, `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` are materialized as **incremental models** (`merge` strategy) with a 7-day lookback window to capture late-arriving refunds. `fct_inventory_fiscal_report` is a full-refresh model — cross-year LAG calculations require a complete recalculation each run.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
@@ -67,7 +67,7 @@ Repeated SQL expressions are extracted into reusable macros to enforce DRY princ
 | Macro | Usage | Purpose |
 |---|---|---|
 | `fiscal_year_end(year_col)` | `fct_inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE` type for period-end valuation and SCD joins |
-| `datediff_days(start, end)` | `int_inventory_ledger` (×2) | Calculates day difference between two date columns, used for inventory aging and velocity buckets |
+| `datediff_days(start, end)` | `int_inventory_items_joined` (×2) | Calculates day difference between two date columns, used for inventory aging and velocity buckets |
 
 ```sql
 -- Example: fiscal_year_end macro in use
@@ -82,7 +82,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
     1. `generate_incremental_data` — Appends ~100 synthetic orders to parquet sources
-    2. `dbt_run_intermediate` — Incremental merge into `int_order_items_summary`
+    2. `dbt_run_intermediate` — Incremental merge into `int_order_items_aggregated`
     3. `dbt_run_marts` — Incremental merge into `fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`
     4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
 
@@ -99,7 +99,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `models/staging/thelook_ecommerce/__thelook_ecommerce__sources.yml`
         - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__orders.yml`, `stg_thelook_ecommerce__order_items.yml`, `stg_thelook_ecommerce__products.yml`, `stg_thelook_ecommerce__users.yml`, `stg_thelook_ecommerce__inventory_items.yml`
         - 📂 `models/testing/seed_order_items.yml`
-        - 📂 `models/intermediate/int_inventory_ledger.yml`, `int_order_items_summary.yml`
+        - 📂 `models/intermediate/inventory/int_inventory_items_joined.yml`, `models/intermediate/orders/int_order_items_aggregated.yml`
         - 📂 `models/marts/fct_order_recon.yml`, `fct_revenue.yml`, `fct_refund_reconciliation.yml`, `fct_inventory_fiscal_report.yml`
     * **Custom Assertion Tests** (business-logic validation):
         - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
@@ -183,7 +183,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 ![Depends On Models](./images/model_depends_models.png)
 ![Depends On Snapshots](./images/model_depends_snapshot.png)
 ![Depends On Macros](./images/model_depends_macro.png)
-* **Dependency Graph**: `fct_inventory_fiscal_report` depends on `int_inventory_ledger` (model), `scd_products` (snapshot), and `fiscal_year_end` (macro) — dbt's model, snapshot, and macro features all wired together in a single financial reporting model.
+* **Dependency Graph**: `fct_inventory_fiscal_report` depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), and `fiscal_year_end` (macro) — dbt's model, snapshot, and macro features all wired together in a single financial reporting model.
 
 ---
 

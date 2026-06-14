@@ -3,7 +3,7 @@
 ) }}
 
 WITH base_ledger AS (
-    SELECT * FROM {{ ref('int_inventory_ledger') }}
+    SELECT * FROM {{ ref('int_inventory_items_joined') }}
 ),
 
 -- 1. get all available fiscal year

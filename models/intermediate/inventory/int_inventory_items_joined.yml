@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: int_inventory_ledger
+  - name: int_inventory_items_joined
     description: >
       A comprehensive sub-ledger at the individual item level (inventory_item_id). 
       This model performs a FULL JOIN between Inbound (Inventory Items) and Outbound (Order Items) 

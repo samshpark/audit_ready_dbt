@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: int_order_items_summary
+  - name: int_order_items_aggregated
     description: >
       An order-level summary aggregated from individual order items (stg_thelook_ecommerce__order_items).
       Each row represents one order, consolidating item counts, total sale amounts,

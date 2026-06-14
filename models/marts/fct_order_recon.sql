@@ -17,7 +17,7 @@ order_items AS (
         total_order_amount,
         order_item_status_agg AS order_status
     FROM
-        {{ ref('int_order_items_summary') }}
+        {{ ref('int_order_items_aggregated') }}
 ),
 
 final AS (
@@ -67,7 +67,7 @@ SELECT * FROM final
 {% if is_incremental() %}
 -- Only process orders touched by the most recent int_order_items_summary incremental run
 WHERE order_id IN (
-    SELECT order_id FROM {{ ref('int_order_items_summary') }}
+    SELECT order_id FROM {{ ref('int_order_items_aggregated') }}
     WHERE dbt_updated_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
 )
 {% endif %}
