@@ -25,7 +25,7 @@ outbound AS (
         order_item_status NOT IN ('cancelled', 'returned', 'processing') -- only include 'shipped' & 'complete'
 ),
 
-data_cleanse AS (
+joined AS (
     SELECT
         COALESCE(inb.inventory_item_id, outb.inventory_item_id) AS inventory_item_id,
         COALESCE(inb.product_id, outb.product_id) AS product_id,
@@ -74,7 +74,7 @@ final AS (
         historical_unit_cost,
         current_market_price,
         sale_price,
-        LEAST(historical_unit_cost, current_market_price) AS lcm_unit_valuation, -- Evlaute LCM (Low cost or market value)
+        LEAST(historical_unit_cost, current_market_price) AS lcm_unit_valuation, -- Evaluate LCM (Lower of Cost or Market)
         -- "Allowance for Inventory Valuation" in Financial Statements
         historical_unit_cost - LEAST(historical_unit_cost, current_market_price) AS inventory_valuation_loss,
         
@@ -119,10 +119,10 @@ final AS (
             THEN 'Product Not Match'
             ELSE 'Product Match'
         END AS product_match,
-        EXTRACT(YEAR FROM outbound_at::timestamp) AS outbound_fiscal_year,
-        EXTRACT(YEAR FROM inbound_at::timestamp) AS inbound_fiscal_year
+        EXTRACT(YEAR FROM CAST(outbound_at AS TIMESTAMP)) AS outbound_fiscal_year,
+        EXTRACT(YEAR FROM CAST(inbound_at AS TIMESTAMP)) AS inbound_fiscal_year
 
-    FROM data_cleanse
+    FROM joined
 )
 
 SELECT * FROM final

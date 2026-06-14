@@ -27,7 +27,7 @@ final AS (
         user_id,
         STRING_AGG(DISTINCT order_item_status ORDER BY order_item_status) AS order_item_status_agg,
         COUNT(*)                                                           AS subledger_item_count,
-        ROUND(SUM(sale_price), 2)                                         AS tot_order_amt,
+        ROUND(SUM(sale_price), 2)                                         AS total_order_amount,
         MIN(created_at)                                                    AS first_item_created_at,
         COUNT(CASE WHEN order_item_status = 'returned' THEN 1 END)        AS returned_item_count,
         ROUND(SUM(CASE WHEN order_item_status = 'returned'
@@ -35,7 +35,7 @@ final AS (
         MAX(returned_at)                                                   AS last_refund_at,
         CURRENT_TIMESTAMP                                                  AS dbt_updated_at
     FROM order_items
-    GROUP BY 1, 2
+    GROUP BY order_id, user_id
 )
 
 SELECT * FROM final

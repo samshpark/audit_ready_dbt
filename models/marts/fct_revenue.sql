@@ -16,7 +16,7 @@ order_items AS (
         user_id,
         order_item_status_agg AS order_status,
         subledger_item_count AS num_of_item,
-        tot_order_amt
+        total_order_amount
     FROM
         {{ ref('int_order_items_summary') }}
 ),
@@ -29,10 +29,10 @@ final AS (
         o.created_at,
         o.shipped_at,
         CASE
-            WHEN o.shipped_at IS NOT NULL THEN oi.tot_order_amt
+            WHEN o.shipped_at IS NOT NULL THEN oi.total_order_amount
             ELSE 0
         END AS recognized_revenue,
-        oi.tot_order_amt AS gross_revenue,
+        oi.total_order_amount AS gross_revenue,
         COALESCE(oi.num_of_item, o.num_of_item) AS total_item_count,
         CASE
             WHEN o.order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'

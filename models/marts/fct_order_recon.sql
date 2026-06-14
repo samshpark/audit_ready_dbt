@@ -14,7 +14,7 @@ order_items AS (
     SELECT
         order_id,
         subledger_item_count AS num_of_item,
-        tot_order_amt,
+        total_order_amount,
         order_item_status_agg AS order_status
     FROM
         {{ ref('int_order_items_summary') }}
@@ -26,7 +26,7 @@ final AS (
         COALESCE(o.order_id, oi.order_id) AS order_id,
         o.user_id,
         o.created_at AS order_at,
-        oi.tot_order_amt, -- subledger amount, orders table does not have amount.
+        oi.total_order_amount, -- subledger amount, orders table does not have amount.
 
         -- Comparison data
         o.num_of_item AS master_item_count,

@@ -92,6 +92,18 @@ models:
           - not_null:
               where: "inbound_at is not null"
 
+      - name: sale_price
+        description: "The actual sale price at which the item was sold. Null if the item is still on-hand."
+
+      - name: product_brand
+        description: "Brand of the product, sourced from inbound inventory record."
+
+      - name: outbound_fiscal_year
+        description: "Fiscal year extracted from outbound_at. Null if the item has not been sold."
+
+      - name: inbound_fiscal_year
+        description: "Fiscal year extracted from inbound_at. Null if no inbound record exists."
+
       - name: product_match
         description: "Internal control flag checking if the Inbound product_id matches the Outbound product_id."
         tests:

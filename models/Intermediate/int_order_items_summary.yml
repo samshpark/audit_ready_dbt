@@ -43,7 +43,7 @@ models:
                 expression: ">= 1"
                 description: "Every order must contain at least one item."
 
-      - name: tot_order_amt
+      - name: total_order_amount
         description: "The gross total sale amount for the order, rounded to 2 decimal places."
         tests:
           - not_null
@@ -82,5 +82,11 @@ models:
                 description: "Refund amount cannot be negative."
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "<= tot_order_amt"
+                expression: "<= total_order_amount"
                 description: "Refund amount cannot exceed the gross order total."
+
+      - name: last_refund_at
+        description: "The latest returned_at timestamp among all returned items in the order. Null if no items were returned."
+
+      - name: dbt_updated_at
+        description: "Internal timestamp set to CURRENT_TIMESTAMP on each run. Used for incremental merge lookback filtering."

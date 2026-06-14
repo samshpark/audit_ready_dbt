@@ -11,7 +11,7 @@ WITH reconciled AS (
         order_id,
         user_id,
         first_item_created_at AS order_date,
-        tot_order_amt AS gross_revenue,
+        total_order_amount AS gross_revenue,
         refund_amount,
         subledger_item_count AS total_item_count,
         returned_item_count AS total_returned_items

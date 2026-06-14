@@ -17,7 +17,7 @@ models:
           - not_null
       - name: order_at
         description: "Order creation timestamp from master table."
-      - name: tot_order_amt
+      - name: total_order_amount
         description: "Total order amount from subledger (sum of sale_price per order)."
       - name: master_item_count
         description: "Item count from master table (raw_orders.num_of_item)."
