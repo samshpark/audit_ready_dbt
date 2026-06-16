@@ -1,27 +1,8 @@
-{{
-    config(
-        materialized='incremental',
-        unique_key='order_id',
-        incremental_strategy='merge'
-    )
-}}
-
-WITH order_items AS (
+WITH source_order_items AS (
     SELECT * FROM {{ ref('stg_thelook_ecommerce__order_items') }}
-    {% if is_incremental() %}
-    -- Lookback window: re-process any order touched in the last 7 days.
-    -- Subquery pulls ALL items for those orders so aggregates stay correct.
-    -- returned_at filter catches refunds that arrive days/weeks after the original order.
-    WHERE order_id IN (
-        SELECT DISTINCT order_id
-        FROM {{ ref('stg_thelook_ecommerce__order_items') }}
-        WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-           OR returned_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
-    )
-    {% endif %}
 ),
 
-final AS (
+aggregate_items_to_order_grain AS (
     SELECT
         order_id,
         user_id,
@@ -32,10 +13,9 @@ final AS (
         COUNT(CASE WHEN order_item_status = 'returned' THEN 1 END)        AS returned_item_count,
         ROUND(SUM(CASE WHEN order_item_status = 'returned'
                        THEN sale_price ELSE 0 END), 2)                    AS refund_amount,
-        MAX(returned_at)                                                   AS last_refund_at,
-        CURRENT_TIMESTAMP                                                  AS dbt_updated_at
-    FROM order_items
+        MAX(returned_at)                                                   AS last_refund_at
+    FROM source_order_items
     GROUP BY order_id, user_id
 )
 
-SELECT * FROM final
+SELECT * FROM aggregate_items_to_order_grain

@@ -25,32 +25,21 @@ outbound AS (
         order_item_status NOT IN ('cancelled', 'returned', 'processing') -- only include 'shipped' & 'complete'
 ),
 
-joined AS (
+join_inbound_to_outbound AS (
     SELECT
         COALESCE(inb.inventory_item_id, outb.inventory_item_id) AS inventory_item_id,
         COALESCE(inb.product_id, outb.product_id) AS product_id,
-        inb.product_id AS inbound_product_id, 
-        outb.product_id AS outbound_product_id, 
+        inb.product_id AS inbound_product_id,
+        outb.product_id AS outbound_product_id,
         inb.product_category,
         inb.product_name,
         inb.product_brand,
 
-        /* [DATA INTEGRITY: CHRONOLOGY CLEANSE]
-        Ensures Inbound (created_at) <= Outbound (shipped_at).
-        
-        Rationale: 
-        - Physically impossible for an item to be sold before it is received.
-        - Prevents negative 'days_in_inventory'.
-        - Eliminates 'audit_check_diff' errors in P&L (Beginning + Purchase - Ending = COGS).
-        
-        Strategy: 
-        Filtering at the INTERMEDIATE layer to provide 'Audit-Ready' data to Marts 
-        while keeping Staging as a raw mirror.
-        */
-        CASE 
-            WHEN outb.outbound_at IS NOT NULL AND inb.inbound_at > outb.outbound_at 
-            THEN outb.outbound_at 
-            ELSE inb.inbound_at 
+        -- Guard against records where outbound precedes inbound (physically impossible; breaks days_in_inventory and P&L audit checks)
+        CASE
+            WHEN outb.outbound_at IS NOT NULL AND inb.inbound_at > outb.outbound_at
+            THEN outb.outbound_at
+            ELSE inb.inbound_at
         END AS inbound_at,
 
         outb.outbound_at,
@@ -62,7 +51,7 @@ joined AS (
         ON inb.inventory_item_id = outb.inventory_item_id
 ),
 
-final AS (
+calculate_inventory_metrics AS (
     SELECT
         inventory_item_id,
         product_id,
@@ -122,7 +111,7 @@ final AS (
         EXTRACT(YEAR FROM CAST(outbound_at AS TIMESTAMP)) AS outbound_fiscal_year,
         EXTRACT(YEAR FROM CAST(inbound_at AS TIMESTAMP)) AS inbound_fiscal_year
 
-    FROM joined
+    FROM join_inbound_to_outbound
 )
 
-SELECT * FROM final
+SELECT * FROM calculate_inventory_metrics

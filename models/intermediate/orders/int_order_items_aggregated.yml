@@ -88,5 +88,3 @@ models:
       - name: last_refund_at
         description: "The latest returned_at timestamp among all returned items in the order. Null if no items were returned."
 
-      - name: dbt_updated_at
-        description: "Internal timestamp set to CURRENT_TIMESTAMP on each run. Used for incremental merge lookback filtering."

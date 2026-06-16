@@ -54,6 +54,7 @@ SELECT * FROM final
 -- Only process orders touched by the most recent int_order_items_summary incremental run
 WHERE order_id IN (
     SELECT order_id FROM {{ ref('int_order_items_aggregated') }}
-    WHERE dbt_updated_at >= CURRENT_TIMESTAMP - INTERVAL '1 day'
+    WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
+       OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
 )
 {% endif %}

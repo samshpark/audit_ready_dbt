@@ -40,14 +40,18 @@ models:
       +tags: ['synthetic', 'test-fixture']
       +docs:
         node_color: "#F1C40F"
-    intermediate: 
-      +materialized: table
+    intermediate:
+      +materialized: view
+      +schema: intermediate
       +docs:
         node_color: "Orange"
     marts:
       +materialized: table
       +docs:
         node_color: "RoyalBlue"
+
+vars:
+  incremental_lookback_days: 1
 
 seeds:
   audit_ready_dbt:
