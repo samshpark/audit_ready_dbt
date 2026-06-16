@@ -59,7 +59,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `models/marts/fct_refund_reconciliation.sql`: Linking refunds to original orders.
     - 📂 `models/marts/fct_inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, and turnover ratios by product and fiscal year.
 
-> **Incremental Strategy**: `int_order_items_aggregated`, `fct_revenue`, `fct_order_recon`, and `fct_refund_reconciliation` are materialized as **incremental models** (`merge` strategy) with a 7-day lookback window to capture late-arriving refunds. `fct_inventory_fiscal_report` is a full-refresh model — cross-year LAG calculations require a complete recalculation each run.
+> **Materialization Strategy**: `int_order_items_aggregated` is materialized as a **view** in a dedicated `intermediate` schema, keeping it separate from end-user marts and eliminating unnecessary warehouse storage. The mart layer (`fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`) uses **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `fct_inventory_fiscal_report` is a full-refresh model — cross-year LAG calculations require a complete recalculation each run.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
@@ -82,7 +82,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
     1. `generate_incremental_data` — Appends ~100 synthetic orders to parquet sources
-    2. `dbt_run_intermediate` — Incremental merge into `int_order_items_aggregated`
+    2. `dbt_run_intermediate` — Refreshes `int_order_items_aggregated` view (full re-query on each run)
     3. `dbt_run_marts` — Incremental merge into `fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`
     4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
 

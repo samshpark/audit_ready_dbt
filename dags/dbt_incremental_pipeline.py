@@ -4,8 +4,9 @@ Schedule: 09:00 UTC daily
 
 Pipeline:
   1. generate_incremental_data  — append synthetic orders for today to the parquet sources
-  2. dbt_run_incremental        — merge new rows into int_order_items_summary (incremental)
-  3. dbt_test_incremental       — run dbt tests on the updated model
+  2. dbt_run_intermediate       — refresh int_order_items_aggregated view
+  3. dbt_run_marts              — incremental merge into fct_revenue, fct_order_recon, fct_refund_reconciliation
+  4. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
 """
 
 import os
@@ -54,11 +55,11 @@ with DAG(
         task_id="dbt_run_intermediate",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select int_order_items_summary --profiles-dir . --target dev"
+            "dbt run --select int_order_items_aggregated --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
-        doc_md="Merge today's new order rows into int_order_items_summary (incremental).",
+        doc_md="Refresh int_order_items_aggregated view (full re-query on each run).",
     )
 
     dbt_run_marts = BashOperator(
@@ -79,11 +80,11 @@ with DAG(
         task_id="dbt_test_incremental",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt test --select int_order_items_summary fct_revenue fct_order_recon fct_refund_reconciliation --profiles-dir . --target dev"
+            "dbt test --select int_order_items_aggregated fct_revenue fct_order_recon fct_refund_reconciliation --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
-        doc_md="Run dbt tests across all four incremental models to validate the daily pipeline output.",
+        doc_md="Run dbt tests across all updated models to validate the daily pipeline output.",
     )
 
     generate_data >> dbt_run_int >> dbt_run_marts >> dbt_test
