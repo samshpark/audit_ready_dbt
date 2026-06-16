@@ -41,6 +41,7 @@ with DAG(
     schedule_interval="0 9 * * *",   # 09:00 UTC every day
     start_date=datetime(2026, 4, 22),
     catchup=False,
+    max_active_runs=1,               # DuckDB only supports one writer at a time
     default_args=default_args,
     tags=["dbt", "incremental", "daily"],
 ) as dag:

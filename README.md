@@ -86,6 +86,12 @@ LEFT JOIN {{ ref('scd_products') }} scd
     3. `dbt_run_marts` — Incremental merge into `fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`
     4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
 
+![Airflow DAG Overview](./images/airflow_dag_overview.png)
+*DAG list — `dbt_daily_incremental` active and scheduled daily at 09:00 UTC*
+
+![Airflow DAG Runs](./images/airflow_dag_runs.png)
+*Grid view — all 4 tasks completing successfully across daily runs (Apr–Jun)*
+
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`
 * **Strategy**: `check` — tracks row-level changes on `cost`, `retail_price`, `product_name`, `category` using `dbt snapshot`.
