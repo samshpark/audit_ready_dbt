@@ -87,3 +87,48 @@ models:
 
       - name: last_refund_at
         description: "The latest returned_at timestamp among all returned items in the order. Null if no items were returned."
+
+  - name: int_orders_joined
+    description: >
+      FULL JOIN of the master order ledger (stg_thelook_ecommerce__orders) and the
+      subledger summary (int_order_items_aggregated). Exposes both master and subledger
+      columns side-by-side so downstream mart models can apply audit logic without
+      repeating the join. Used by order_reconciliation and revenue.
+    columns:
+      - name: order_id
+        description: "Unified order ID. COALESCE of subledger and master order_id."
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Unified user ID. COALESCE of subledger and master user_id."
+      - name: master_order_id
+        description: "order_id from the master ledger (stg_orders). Null indicates an orphan subledger record."
+      - name: master_order_status
+        description: "Order status from the master ledger."
+      - name: master_item_count
+        description: "Item count from the master ledger (num_of_item)."
+      - name: created_at
+        description: "Order creation timestamp from the master ledger."
+      - name: shipped_at
+        description: "Shipment timestamp from the master ledger. Null if not yet shipped."
+      - name: returned_at
+        description: "Return timestamp from the master ledger."
+      - name: delivered_at
+        description: "Delivery timestamp from the master ledger."
+      - name: subledger_order_id
+        description: "order_id from the subledger (int_order_items_aggregated). Null indicates a missing subledger."
+      - name: subledger_order_status
+        description: "Aggregated item status string from the subledger."
+      - name: subledger_item_count
+        description: "Item count from the subledger."
+      - name: total_order_amount
+        description: "Gross order total from the subledger."
+      - name: first_item_created_at
+        description: "Earliest item created_at in the order. Used for incremental filtering in downstream marts."
+      - name: returned_item_count
+        description: "Count of returned items in the order."
+      - name: refund_amount
+        description: "Total refund amount for the order."
+      - name: last_refund_at
+        description: "Latest return timestamp in the order. Used for incremental filtering in downstream marts."

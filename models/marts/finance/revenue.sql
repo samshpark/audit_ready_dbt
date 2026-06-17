@@ -6,54 +6,41 @@
     )
 }}
 
-WITH orders AS (
-    SELECT * FROM {{ ref('stg_thelook_ecommerce__orders') }}
-),
-
-order_items AS (
-    SELECT
-        order_id,
-        user_id,
-        order_item_status_agg AS order_status,
-        subledger_item_count AS num_of_item,
-        total_order_amount
-    FROM
-        {{ ref('int_order_items_aggregated') }}
+WITH base AS (
+    SELECT * FROM {{ ref('int_orders_joined') }}
 ),
 
 final AS (
     SELECT
-        COALESCE(oi.order_id, o.order_id) AS order_id,
-        COALESCE(oi.user_id, o.user_id) AS user_id,
-        COALESCE(oi.order_status, o.order_status) AS order_status,
-        o.created_at,
-        o.shipped_at,
+        order_id,
+        user_id,
+        COALESCE(subledger_order_status, master_order_status) AS order_status,
+        created_at,
+        shipped_at,
         CASE
-            WHEN o.shipped_at IS NOT NULL THEN oi.total_order_amount
+            WHEN shipped_at IS NOT NULL THEN total_order_amount
             ELSE 0
         END AS recognized_revenue,
-        oi.total_order_amount AS gross_revenue,
-        COALESCE(oi.num_of_item, o.num_of_item) AS total_item_count,
+        total_order_amount AS gross_revenue,
+        COALESCE(subledger_item_count, master_item_count) AS total_item_count,
         CASE
-            WHEN o.order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
-            WHEN oi.order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
+            WHEN master_order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
+            WHEN subledger_order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
             ELSE 'MATCHED'
-        END as data_integrity_status,
+        END AS data_integrity_status,
         CASE
-            WHEN o.shipped_at IS NULL THEN 'SHIPPING_PENDING'
-            WHEN date_trunc('month', CAST(o.created_at AS TIMESTAMP)) != date_trunc('month', CAST(o.shipped_at AS TIMESTAMP))
+            WHEN shipped_at IS NULL THEN 'SHIPPING_PENDING'
+            WHEN date_trunc('month', CAST(created_at AS TIMESTAMP)) != date_trunc('month', CAST(shipped_at AS TIMESTAMP))
                 THEN 'POTENTIAL CUT-OFF RISK'
             ELSE 'NORMAL'
-        END as cutoff_status
-    FROM order_items oi
-    FULL JOIN orders o ON oi.order_id = o.order_id
+        END AS cutoff_status
+    FROM base
 )
 
 SELECT * FROM final
 {% if is_incremental() %}
--- Only process orders touched by the most recent int_order_items_summary incremental run
 WHERE order_id IN (
-    SELECT order_id FROM {{ ref('int_order_items_aggregated') }}
+    SELECT order_id FROM {{ ref('int_orders_joined') }}
     WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
        OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
 )

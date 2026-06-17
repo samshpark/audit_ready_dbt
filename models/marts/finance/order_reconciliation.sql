@@ -6,44 +6,33 @@
     )
 }}
 
-WITH orders AS (
-    SELECT * FROM {{ ref('stg_thelook_ecommerce__orders') }}
-),
-
-order_items AS (
-    SELECT
-        order_id,
-        subledger_item_count AS num_of_item,
-        total_order_amount,
-        order_item_status_agg AS order_status
-    FROM
-        {{ ref('int_order_items_aggregated') }}
+WITH base AS (
+    SELECT * FROM {{ ref('int_orders_joined') }}
 ),
 
 final AS (
-
     SELECT
-        COALESCE(o.order_id, oi.order_id) AS order_id,
-        o.user_id,
-        o.created_at AS order_at,
-        oi.total_order_amount, -- subledger amount, orders table does not have amount.
+        order_id,
+        user_id,
+        created_at AS order_at,
+        total_order_amount,
 
         -- Comparison data
-        o.num_of_item AS master_item_count,
-        oi.num_of_item AS subledger_item_count,
+        master_item_count,
+        subledger_item_count,
 
         -- 1. Existence Reconciliation
         CASE
-            WHEN o.order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
-            WHEN oi.order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
+            WHEN master_order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
+            WHEN subledger_order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
             ELSE 'RECONCILIATION SUCCESSFUL'
         END AS order_reconciliation,
 
         -- 2. Item Count Reconciliation
         CASE
-            WHEN o.order_id IS NOT NULL AND oi.order_id IS NOT NULL THEN
+            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL THEN
                 CASE
-                    WHEN COALESCE(o.num_of_item, 0) = COALESCE(oi.num_of_item, 0) THEN 'INTEGRITY VERIFIED'
+                    WHEN COALESCE(master_item_count, 0) = COALESCE(subledger_item_count, 0) THEN 'INTEGRITY VERIFIED'
                     ELSE 'VARIANCE DETECTED'
                 END
             ELSE 'N/A - PREVIOUS ERROR'
@@ -51,23 +40,20 @@ final AS (
 
         -- 3. Order Status Reconciliation
         CASE
-            WHEN o.order_id IS NOT NULL AND oi.order_id IS NOT NULL THEN
+            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL THEN
                 CASE
-                    WHEN o.order_status = oi.order_status THEN 'INTEGRITY VERIFIED'
+                    WHEN master_order_status = subledger_order_status THEN 'INTEGRITY VERIFIED'
                     ELSE 'VARIANCE DETECTED'
                 END
             ELSE 'N/A - PREVIOUS ERROR'
         END AS order_status_recon
-    FROM orders o
-    FULL JOIN order_items oi
-        ON o.order_id = oi.order_id
+    FROM base
 )
 
 SELECT * FROM final
 {% if is_incremental() %}
--- Only process orders touched by the most recent int_order_items_summary incremental run
 WHERE order_id IN (
-    SELECT order_id FROM {{ ref('int_order_items_aggregated') }}
+    SELECT order_id FROM {{ ref('int_orders_joined') }}
     WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
        OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
 )
