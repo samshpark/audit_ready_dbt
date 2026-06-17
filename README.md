@@ -31,7 +31,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
 **Visualizing the Audit-Ready Data Pipeline**
-* **Layered Architecture**: Implemented a 3-tier structure (Staging → Intermediate → Marts) to ensure data traceability.
+* **Layered Architecture**: Implemented a 4-tier structure (Staging → Intermediate → Marts → Semantic Layer) to ensure data traceability.
 * **Color-Coded Nodes**:
     - 🟢 Light Green: Raw Sources
     - 🟤 Brown: Seeds (Generated synthetic data)
@@ -42,31 +42,43 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 🔴 Red: Automated Data Quality Tests
 
 #### Model Directory
-* **Staging Layer**:
-    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__orders.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__order_items.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__products.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__users.sql`
-    - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__inventory_items.sql`
+* **Staging Layer** (`models/staging/thelook_ecommerce/`):
+    - 📂 `stg_thelook_ecommerce__orders.sql`
+    - 📂 `stg_thelook_ecommerce__order_items.sql`
+    - 📂 `stg_thelook_ecommerce__products.sql`
+    - 📂 `stg_thelook_ecommerce__users.sql`
+    - 📂 `stg_thelook_ecommerce__inventory_items.sql`
+    - 📂 `_thelook_ecommerce__models.yml` — consolidated model documentation
+    - 📂 `__thelook_ecommerce__sources.yml` — source definitions
+
 * **Testing Layer**:
     - 📂 `models/testing/seed_order_items.sql`
-* **Intermediate**: 
-    - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
-    - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`
-* **Marts (Audit Layer)**:
-    - 📂 `models/marts/fct_order_recon.sql`: Master-to-Subledger reconciliation.
-    - 📂 `models/marts/fct_revenue.sql`: Accrual-based revenue recognition.
-    - 📂 `models/marts/fct_refund_reconciliation.sql`: Linking refunds to original orders.
-    - 📂 `models/marts/fct_inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, and turnover ratios by product and fiscal year.
 
-> **Materialization Strategy**: `int_order_items_aggregated` is materialized as a **view** in a dedicated `intermediate` schema, keeping it separate from end-user marts and eliminating unnecessary warehouse storage. The mart layer (`fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`) uses **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `fct_inventory_fiscal_report` is a full-refresh model — cross-year LAG calculations require a complete recalculation each run.
+* **Intermediate Layer**:
+    - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
+    - 📂 `models/intermediate/orders/int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
+    - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
+
+* **Marts (Audit Layer)** (`models/marts/finance/`):
+    - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation.
+    - 📂 `revenue.sql`: Accrual-based revenue recognition with cut-off risk detection.
+    - 📂 `refund_reconciliation.sql`: Linking refunds to original orders.
+    - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, and turnover ratios by product and fiscal year.
+    - 📂 `_finance__models.yml` — consolidated model documentation
+    - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
+    - 📂 `_finance__metrics.yml` — business metric definitions
+
+* **Utilities Layer** (`models/utilities/`):
+    - 📂 `metricflow_time_spine.sql` — date spine table required by MetricFlow for time-based metric aggregation
+
+> **Materialization Strategy**: Staging and intermediate models are materialized as **views** — zero storage cost, always up-to-date. `order_reconciliation`, `revenue`, and `refund_reconciliation` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
 
 | Macro | Usage | Purpose |
 |---|---|---|
-| `fiscal_year_end(year_col)` | `fct_inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE` type for period-end valuation and SCD joins |
+| `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE` type for period-end valuation and SCD joins |
 | `datediff_days(start, end)` | `int_inventory_items_joined` (×2) | Calculates day difference between two date columns, used for inventory aging and velocity buckets |
 
 ```sql
@@ -82,8 +94,8 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
     1. `generate_incremental_data` — Appends ~100 synthetic orders to parquet sources
-    2. `dbt_run_intermediate` — Refreshes `int_order_items_aggregated` view (full re-query on each run)
-    3. `dbt_run_marts` — Incremental merge into `fct_revenue`, `fct_order_recon`, `fct_refund_reconciliation`
+    2. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
+    3. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`
     4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
 
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
@@ -102,20 +114,65 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
 ![dbt Test Results](./images/test_results.png)
     * **Model Schema Tests** (column-level constraints & descriptions):
+        - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
         - 📂 `models/staging/thelook_ecommerce/__thelook_ecommerce__sources.yml`
-        - 📂 `models/staging/thelook_ecommerce/stg_thelook_ecommerce__orders.yml`, `stg_thelook_ecommerce__order_items.yml`, `stg_thelook_ecommerce__products.yml`, `stg_thelook_ecommerce__users.yml`, `stg_thelook_ecommerce__inventory_items.yml`
-        - 📂 `models/testing/seed_order_items.yml`
-        - 📂 `models/intermediate/inventory/int_inventory_items_joined.yml`, `models/intermediate/orders/int_order_items_aggregated.yml`
-        - 📂 `models/marts/fct_order_recon.yml`, `fct_revenue.yml`, `fct_refund_reconciliation.yml`, `fct_inventory_fiscal_report.yml`
+        - 📂 `models/intermediate/inventory/_int_inventory__models.yml`
+        - 📂 `models/intermediate/orders/_int_orders__models.yml`
+        - 📂 `models/marts/finance/_finance__models.yml`
     * **Custom Assertion Tests** (business-logic validation):
-        - 📂 `tests/assert_fct_order_reconciliation_is_successful.sql`
+        - 📂 `tests/assert_order_reconciliation_is_successful.sql`
         - 📂 `tests/assert_no_variance_in_order_recon.sql`
         - 📂 `tests/assert_revenue_recognition_logic.sql`
+
+### 7. Semantic Layer (MetricFlow)
+
+Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, reusable business metrics on top of the mart layer. This ensures metric definitions live in version-controlled code rather than scattered across BI tools.
+
+#### Semantic Models & Metrics
+
+| Semantic Model | Source Mart | Entity | Time Dimension |
+|---|---|---|---|
+| `revenue` | `revenue` | `order` | `created_at` (day) |
+| `refund_reconciliation` | `refund_reconciliation` | `order` | `order_date` (day) |
+| `inventory_fiscal_report` | `inventory_fiscal_report` | `product` | `fiscal_year_end_date` (year) |
+
+| Category | Metrics |
+|---|---|
+| Revenue | `total_recognized_revenue`, `total_gross_revenue`, `order_count`, `revenue_recognition_rate` |
+| Refund | `total_refund_amount`, `total_net_revenue`, `refund_rate`, `refund_base_gross_revenue` |
+| Inventory | `total_inventory_value`, `total_net_realizable_value`, `total_lcm_allowance`, `total_cogs`, `total_period_revenue`, `inventory_gross_profit` |
+
+#### Example Queries
+
+```bash
+# Revenue metrics by month
+mf query --metrics total_gross_revenue,total_recognized_revenue,order_count \
+         --group-by metric_time__month
+
+# Refund breakdown by refund type
+mf query --metrics refund_rate,total_refund_amount,total_net_revenue \
+         --group-by order__refund_type
+
+# Inventory valuation by fiscal year and product category
+mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
+         --group-by product__fiscal_year,product__product_category
+```
+
+#### Architectural Note: Semantic Layer vs. Tableau
+
+This project uses **dbt Core** (not dbt Cloud), which means the Semantic Layer cannot be directly wired into Tableau — that integration requires dbt Cloud's managed Semantic Layer endpoint.
+
+As a result, the BI layer (Tableau) connects directly to the DuckDB mart tables, while the Semantic Layer serves two independent purposes:
+
+1. **Metric governance**: All business metric definitions (`revenue_recognition_rate`, `refund_rate`, etc.) are version-controlled in code rather than defined ad-hoc in dashboards.
+2. **CLI demonstration**: `mf query` enables direct metric querying from the terminal, useful for ad-hoc analysis and verifying metric logic before surfacing in dashboards.
+
+This also explains why the mart layer retains a **denormalized, purpose-built structure** (`revenue`, `order_reconciliation`, `refund_reconciliation` as separate tables) rather than consolidating into a single wide `orders` table. With dbt Cloud Semantic Layer handling the abstraction, normalized marts would be preferred — but for direct BI tool consumption, focused marts are more practical.
 
 ---
 
 ## 3. Tech Stack & Engineering Value
-* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet.
+* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow.
 * **Auditability**: End-to-end metadata for clear financial audit trails.
 * **Cost-Efficiency**: Reduced warehouse compute costs by **90%** during development.
 * **Idempotency**: Consistent financial results regardless of re-run frequency.
@@ -126,18 +183,18 @@ LEFT JOIN {{ ref('scd_products') }} scd
 This project moves beyond simple ETL by embedding **Accounting Principles** into the data transformation layer to ensure audit-ready data reliability.
 
 ### 1. Financial Data Reconciliation (Master-to-Subledger)
-* **File**: 📂 `models/marts/fct_order_recon.sql`
-* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items). 
-* **Validation Logic**: 
+* **File**: 📂 `models/marts/finance/order_reconciliation.sql`
+* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items).
+* **Validation Logic**:
     - **Completeness**: Verified `order_id` matches across all layers to ensure no data loss.
     - **Accuracy**: Reconciled total item counts and order statuses between master records and granular transaction lines.
     - **Status Synchronization**: Validated **Order Status alignment** to detect any state-mismatch discrepancies between the header and line levels.
 * **Audit Control**: Engineered an automated reconciliation layer that triggers an Audit Alert for any variance. This proactive control prevents downstream reporting errors and ensures the data is **"Audit-Ready"** for financial verification.
 
 ### 2. Revenue Recognition & Cut-off Management
-* **File**: 📂 `models/marts/fct_revenue.sql`
+* **File**: 📂 `models/marts/finance/revenue.sql`
 * **Objective**: Implemented **Accrual Basis** accounting standards by designating `shipped_at` (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** principles.
-* **Complex Order State Management**: 
+* **Complex Order State Management**:
     - Utilized `STRING_AGG(DISTINCT status)` to synchronize and monitor multiple item statuses within a single `order_id`.
     - Applied **COALESCE logic** to prevent data loss across the Full-Join between Master and Sub-ledger, maintaining a Single Source of Truth (SSOT).
 * **Temporal Analysis & Cut-off Control**:
@@ -145,7 +202,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
     - **Risk Mitigation**: Automated detection of **Potential Cut-off Risks** where revenue recognition spans different fiscal periods, preventing overstatement of monthly/yearly earnings.
 
 ### 3. Returns & Refund Reconciliation
-* **File**: 📂 `models/marts/fct_refund_reconciliation.sql`
+* **File**: 📂 `models/marts/finance/refund_reconciliation.sql`
 * **Objective**: Developed a mechanism to **link refund events back to their original `order_id`**, moving away from treating refunds as isolated negative flows to provide a holistic view of the order lifecycle.
 * **Revenue Reversal Integrity**: Ensured accurate **Net Revenue** calculation by accounting for historical reversals, eliminating the risk of overstated top-line metrics.
 * **Audit Trail**: Created a `refund_type` classification and `refund_rate` metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
@@ -154,27 +211,28 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 
     - **Solution**: To validate the robustness of the reconciliation logic, I implemented a **Unit Testing** environment using **dbt Seeds**.
 
-        1. **Automated Synthetic Data Generation (via Python)**: Developed a Python script (📂 `scripts/create_sample_order_items.py`) to programmatically generate synthetic transactional data. This script was specifically engineered to simulate "multi-item orders with mix statuses" (e.g. one item completed, another returned within same `order_id`), which were missing in the original production dataset. 
+        1. **Automated Synthetic Data Generation (via Python)**: Developed a Python script (📂 `scripts/create_sample_order_items.py`) to programmatically generate synthetic transactional data. This script was specifically engineered to simulate "multi-item orders with mix statuses" (e.g. one item completed, another returned within same `order_id`), which were missing in the original production dataset.
             - Result file: 📂 `seeds/data_test_order_items.csv`
 
-        2. **Isolated Test Environment**: Constructed a separate test model to validate the aggregation logic in isolation, ensuring that the integrity of the core production data remained uncompromised. 
+        2. **Isolated Test Environment**: Constructed a separate test model to validate the aggregation logic in isolation, ensuring that the integrity of the core production data remained uncompromised.
 
         3. **Logic Verification**: Successfully verified that the model accurately **links individual events back to their original** `order_id`, correctly identifying 'PARTIALLY REFUNDED' cases and calculating precise refund rates and values.
 
-    - **Reliability** - Idempotency: Established an idempotent test pipeline by integrating python-based synthetic data generation with dbt seeds, ensuring consistent and reproducible testing environments on demand. 
+    - **Reliability** - Idempotency: Established an idempotent test pipeline by integrating python-based synthetic data generation with dbt seeds, ensuring consistent and reproducible testing environments on demand.
 
-    - **Precision** - Edge Case Handling: Implemented robust edge case handling to distinguish between 'Fully Refunded' and 'Partially Refunded' orders, eliminating potential reconciliation gap and ensuring 100% revenue accuracy. 
+    - **Precision** - Edge Case Handling: Implemented robust edge case handling to distinguish between 'Fully Refunded' and 'Partially Refunded' orders, eliminating potential reconciliation gap and ensuring 100% revenue accuracy.
 
-    - **Engineering Value: Future Proof Modeling**: Although the current source data lacks partial refund variety, I designed this logic to be **future-proof**. By simulating these scenarios, I’ve ensured the model is ready for complex, real-world transactional environments—moving beyond simple data transformation to **proactive business logic modeling**.
+    - **Engineering Value: Future Proof Modeling**: Although the current source data lacks partial refund variety, I designed this logic to be **future-proof**. By simulating these scenarios, I've ensured the model is ready for complex, real-world transactional environments—moving beyond simple data transformation to **proactive business logic modeling**.
 
 ### 4. Financial Inventory Control & Valuation (Specific Identification)
+* **File**: 📂 `models/marts/finance/inventory_fiscal_report.sql`
 * **Methodology (Specific Identification & Cut-off)**: Implemented item-level cost tracking by following each `inventory_item_id` from inbound receipt to outbound sale — a **Specific Identification** approach that provides a granular audit trail and precise COGS calculation without the pooling assumptions of FIFO/LIFO.
-* **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**. 
+* **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**.
 * **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` against the **period-end market price** sourced from the `scd_products` Type 2 snapshot (effective as of December 31st of each fiscal year). This ensures the LCM write-down reflects actual year-end market conditions — not the price frozen at inbound receipt — calculating the correct "Allowance for Inventory Valuation" for Balance Sheet reporting.
 * **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
-#### Model Detail: fct_inventory_fiscal_report
+#### Model Detail: inventory_fiscal_report
 > Below is the technical documentation of the final audit mart, demonstrating the integration of accounting principles and data engineering.
 
 ![Model Metadata](./images/model_header.png)
@@ -189,7 +247,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 ![Depends On Models](./images/model_depends_models.png)
 ![Depends On Snapshots](./images/model_depends_snapshot.png)
 ![Depends On Macros](./images/model_depends_macro.png)
-* **Dependency Graph**: `fct_inventory_fiscal_report` depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), and `fiscal_year_end` (macro) — dbt's model, snapshot, and macro features all wired together in a single financial reporting model.
+* **Dependency Graph**: `inventory_fiscal_report` depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), and `fiscal_year_end` (macro) — dbt's model, snapshot, and macro features all wired together in a single financial reporting model.
 
 ---
 
@@ -198,14 +256,16 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Audit Trail:** Every model is documented with metadata to provide a clear path from raw data to final report—essential for financial audits.
 * **Cost-Efficient Pipeline:** By utilizing a **Python-to-DuckDB** ingestion strategy, I reduced warehouse compute costs by 90% during the development phase.
 * **Idempotency:** Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
+
 ---
 
 ## 6. Roadmap
 The following features are planned for future development:
 
-* **Dynamic Financial Dashboards:** Automated P&L dashboard using **Streamlit** refreshing daily from dbt Marts.
-* **Self-Service Analytics:** Clean, documented semantic layer so non-technical stakeholders (FP&A, Marketing) can pull reports without SQL.
+* **Dynamic Financial Dashboards:** Tableau dashboard connecting directly to DuckDB mart tables, visualizing revenue recognition, refund trends, and inventory health.
 * **Anomaly Detection**: Automated notifications for significant financial anomalies (e.g., sudden spikes in return rates).
+
+---
 
 ## 7. Getting Started
 
@@ -217,14 +277,14 @@ git clone https://github.com/samshpark/audit_ready_dbt.git
 cd audit_ready_dbt
 ```
 
-2. Setup Virtual Environment & Install dependencies
+2. **Setup Virtual Environment & Install dependencies**
 ```bash
 # Create and activate venv
 python3 -m venv venv
 source venv/bin/activate
 
 # Install required packages
-pip install dbt-duckdb dbt-bigquery google-cloud-bigquery pandas pyarrow
+pip install dbt-duckdb dbt-bigquery google-cloud-bigquery pandas pyarrow dbt-metricflow
 ```
 
 3. **Set up BigQuery credentials**
@@ -250,4 +310,15 @@ dbt seed      # load synthetic test data
 dbt snapshot  # build scd_products price history
 dbt run       # execute all models
 dbt test      # validate all tests
+```
+
+7. **Query metrics via Semantic Layer**
+```bash
+# Validate semantic model definitions
+mf validate-configs
+
+# Example metric queries
+mf query --metrics total_gross_revenue,order_count --group-by metric_time__month
+mf query --metrics refund_rate,total_refund_amount --group-by order__refund_type
+mf query --metrics total_inventory_value,inventory_gross_profit --group-by product__fiscal_year,product__product_category
 ```
