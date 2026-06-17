@@ -3,5 +3,5 @@ SELECT
     order_reconciliation,
     master_item_count,
     subledger_item_count
-FROM {{ ref('fct_order_recon') }}
+FROM {{ ref('order_reconciliation') }}
 WHERE order_reconciliation != 'RECONCILIATION SUCCESSFUL'

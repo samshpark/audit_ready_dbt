@@ -9,7 +9,7 @@ SELECT
     r.subledger_item_count,
     r.order_item_count_recon,
     r.order_status_recon
-FROM {{ ref('fct_order_recon') }} r
+FROM {{ ref('order_reconciliation') }} r
 LEFT JOIN {{ ref('int_order_items_aggregated') }} i ON r.order_id = i.order_id
 WHERE r.order_item_count_recon = 'VARIANCE DETECTED'
    OR (

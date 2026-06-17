@@ -1,0 +1,218 @@
+version: 2
+
+models:
+  - name: inventory_fiscal_report
+    description: >
+      Annual inventory valuation and performance report.
+      Links Balance Sheet (Inventory Value) and Profit & Loss (COGS) metrics
+      to provide an audit-ready view of inventory flow per product per fiscal year.
+    config:
+      tags: ['financial', 'inventory_valuation', 'audit_ready']
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - fiscal_year
+            - product_id
+
+    columns:
+      - name: fiscal_year
+        description: "The reporting fiscal year (YYYY)."
+        tests:
+          - not_null
+
+      - name: product_id
+        description: "Unique identifier for the product."
+        tests:
+          - not_null
+
+      - name: period_units_sold
+        description: "Quantity of units sold during the fiscal year."
+
+      - name: period_cogs_amount
+        description: "Total Cost of Goods Sold (COGS) recognized in the P&L for this fiscal year."
+
+      - name: period_revenue
+        description: "Total sales revenue generated from the sold units in this fiscal year."
+
+      - name: beginning_inv_value
+        description: "Beginning inventory value at cost, carried over from the previous year's ending inventory."
+
+      - name: period_purchase_amount
+        description: "Total cost of new inventory purchased/received during the fiscal year."
+
+      - name: ending_gross_inv_value
+        description: "Ending inventory value at cost as of December 31st of the fiscal year."
+
+      - name: ending_allowance_lcm
+        description: >
+          Allowance for inventory write-down under LCM rules: historical cost minus period-end NRV.
+          Represents the balance sheet contra-asset (Allowance for Inventory Valuation).
+          Market price is sourced from scd_products at fiscal year-end, not at inbound time.
+
+      - name: ending_net_realizable_value
+        description: >
+          Ending inventory value after LCM (Lower of Cost or Market) adjustment.
+          Market price is sourced from the scd_products snapshot at fiscal year-end (Dec 31),
+          ensuring valuation reflects actual period-end market conditions rather than the price
+          frozen at inbound receipt. Falls back to inbound-time price if no snapshot record exists.
+
+      - name: audit_check_diff
+        description: >
+          Verification field: (Beginning + Purchase - Ending) - COGS.
+          Should be 0. Values outside +/- 0.019 indicate data integrity issues or unrecorded shrinkage.
+        tests:
+          - accepted_values:
+              values: [0]
+              severity: warn
+              description: "Warning if reconciliation fails beyond the 0.019 threshold."
+
+      - name: inventory_turnover_ratio
+        description: "Efficiency ratio: COGS / Average Inventory. Higher indicates better performance."
+
+      - name: gross_profit_margin
+        description: "Profitability ratio: (Revenue - COGS) / Revenue."
+
+      - name: inventory_risk_rating
+        description: "Classification of inventory health based on aging (days on hand) and valuation (NRV vs Cost)."
+        tests:
+          - accepted_values:
+              values: ['Healthy', 'Warning: Slow Moving', 'Critical: Obsolete', 'Adjustment Required: NRV < Cost']
+
+  - name: order_reconciliation
+    description: >
+      Master-to-subledger reconciliation at order level.
+      Detects orphaned subledger records, missing subledgers,
+      item count variances, and status mismatches between raw_orders and raw_order_items.
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+
+      - name: user_id
+        description: "Customer identifier. Sourced from master (raw_orders)."
+        tests:
+          - not_null
+
+      - name: order_at
+        description: "Order creation timestamp from master table."
+
+      - name: total_order_amount
+        description: "Total order amount from subledger (sum of sale_price per order)."
+
+      - name: master_item_count
+        description: "Item count from master table (raw_orders.num_of_item)."
+
+      - name: subledger_item_count
+        description: "Item count from subledger (COUNT of raw_order_items per order)."
+
+      - name: order_reconciliation
+        tests:
+          - accepted_values:
+              arguments:
+                values: [
+                  'RECONCILIATION SUCCESSFUL',
+                  'ERR: ORPHAN SUB-LEDGER',
+                  'ERR: MISSING SUB-LEDGER'
+                ]
+
+      - name: order_item_count_recon
+        description: "Identify if item count in master & sub-ledger agrees"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
+
+      - name: order_status_recon
+        description: "Identify if order status in master & sub-ledger agrees"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
+
+  - name: refund_reconciliation
+    description: >
+      This model links individual refund events back to their original 'order_id'
+      to ensure Net Revenue integrity and identify partial refund patterns.
+
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "refund_amount <= gross_revenue"
+            name: assert_refund_not_exceeding_revenue
+            description: "Refund cannot exceed the original transaction value (Audit Control)."
+
+    columns:
+      - name: order_id
+        description: "Primary key for reconciliation."
+        tests:
+          - not_null
+          - unique
+
+      - name: refund_type
+        description: "Classification of refund based on synthetic data testing."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['FULLY REFUNDED', 'PARTIALLY REFUNDED', 'NO REFUND']
+
+      - name: refund_count_rate
+        description: "Calculated refund count percentage per order. Tested against synthetic edge cases."
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+
+      - name: refund_value_rate
+        description: "Calculated refund value percentage per order. Tested against synthetic edge cases."
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
+
+  - name: revenue
+    description: "Orders and items joined to calculate recognized revenue and audit risks."
+    columns:
+      - name: order_id
+        tests:
+          - unique
+          - not_null
+
+      - name: created_at
+        description: "Order creation timestamp (UTC). Used for cut-off period determination."
+
+      - name: shipped_at
+        description: "Shipment timestamp. Null indicates pending shipment. Drives revenue recognition."
+
+      - name: recognized_revenue
+        description: "Accrual-basis revenue: equals gross_revenue only when shipped_at is populated."
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: gross_revenue
+        description: "Total order value from the subledger regardless of shipment status."
+
+      - name: user_id
+        tests:
+          - not_null
+
+      - name: data_integrity_status
+        description: "Checks if order exists in both master and sub-ledger."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['MATCHED', 'ERR: ORPHAN SUB-LEDGER', 'ERR: MISSING SUB-LEDGER']
+
+      - name: cutoff_status
+        description: "Identifies month-end shipping risks for revenue recognition."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['NORMAL', 'SHIPPING_PENDING', 'POTENTIAL CUT-OFF RISK']
