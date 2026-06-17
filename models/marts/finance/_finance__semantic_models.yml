@@ -1,0 +1,147 @@
+semantic_models:
+
+  - name: revenue
+    description: "Order-level revenue recognition model. Grain: one row per order."
+    model: ref('revenue')
+    defaults:
+      agg_time_dimension: created_at
+
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: user
+        type: foreign
+        expr: user_id
+
+    dimensions:
+      - name: created_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: shipped_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: order_status
+        type: categorical
+      - name: data_integrity_status
+        type: categorical
+      - name: cutoff_status
+        type: categorical
+
+    measures:
+      - name: recognized_revenue
+        description: "Accrual-basis revenue: counted only when shipped_at is populated."
+        agg: sum
+        expr: recognized_revenue
+      - name: gross_revenue
+        description: "Total order value regardless of shipment status."
+        agg: sum
+        expr: gross_revenue
+      - name: order_count
+        description: "Total number of orders."
+        agg: count_distinct
+        expr: order_id
+      - name: total_item_count
+        agg: sum
+        expr: total_item_count
+
+  - name: refund_reconciliation
+    description: "Order-level refund reconciliation model. Grain: one row per order."
+    model: ref('refund_reconciliation')
+    defaults:
+      agg_time_dimension: order_date
+
+    entities:
+      - name: order
+        type: primary
+        expr: order_id
+      - name: user
+        type: foreign
+        expr: user_id
+
+    dimensions:
+      - name: order_date
+        type: time
+        type_params:
+          time_granularity: day
+      - name: refund_type
+        type: categorical
+
+    measures:
+      - name: refund_gross_revenue
+        description: "Gross order revenue before refunds."
+        agg: sum
+        expr: gross_revenue
+      - name: refund_amount
+        description: "Total refund amount per order."
+        agg: sum
+        expr: refund_amount
+      - name: net_revenue
+        description: "Revenue after refunds (gross - refund)."
+        agg: sum
+        expr: net_revenue
+      - name: total_returned_items
+        agg: sum
+        expr: total_returned_items
+      - name: refunded_order_count
+        description: "Count of orders with at least one refund."
+        agg: count_distinct
+        expr: order_id
+
+  - name: inventory_fiscal_report
+    description: >
+      Annual inventory valuation model. Grain: one row per (product_id, fiscal_year).
+      fiscal_year (integer) is converted to fiscal year-end date (Dec 31) for time aggregation.
+    model: ref('inventory_fiscal_report')
+    defaults:
+      agg_time_dimension: fiscal_year_end_date
+
+    entities:
+      - name: product
+        type: primary
+        expr: product_id
+
+    dimensions:
+      - name: fiscal_year_end_date
+        type: time
+        expr: "CAST(CAST(fiscal_year AS VARCHAR) || '-12-31' AS DATE)"
+        type_params:
+          time_granularity: year
+      - name: fiscal_year
+        type: categorical
+        expr: CAST(fiscal_year AS VARCHAR)
+      - name: product_name
+        type: categorical
+      - name: product_category
+        type: categorical
+      - name: product_brand
+        type: categorical
+      - name: inventory_risk_rating
+        type: categorical
+
+    measures:
+      - name: period_revenue
+        description: "Total sales revenue for the fiscal year."
+        agg: sum
+        expr: period_revenue
+      - name: period_cogs
+        description: "Total Cost of Goods Sold for the fiscal year."
+        agg: sum
+        expr: period_cogs_amount
+      - name: period_units_sold
+        agg: sum
+        expr: period_units_sold
+      - name: ending_inventory_value
+        description: "Gross inventory value at cost as of fiscal year end."
+        agg: sum
+        expr: ending_gross_inv_value
+      - name: ending_nrv
+        description: "Net Realizable Value after LCM adjustment at fiscal year end."
+        agg: sum
+        expr: ending_net_realizable_value
+      - name: lcm_allowance
+        description: "Total LCM write-down allowance (contra-asset)."
+        agg: sum
+        expr: ending_allowance_lcm

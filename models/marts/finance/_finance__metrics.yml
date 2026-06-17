@@ -1,0 +1,124 @@
+metrics:
+
+  # -------------------------------------------------------
+  # Revenue Metrics
+  # -------------------------------------------------------
+
+  - name: total_recognized_revenue
+    label: "Total Recognized Revenue"
+    description: "Accrual-basis revenue from shipped orders only."
+    type: simple
+    type_params:
+      measure: recognized_revenue
+
+  - name: total_gross_revenue
+    label: "Total Gross Revenue"
+    description: "Total order value regardless of shipment status."
+    type: simple
+    type_params:
+      measure: gross_revenue
+
+  - name: order_count
+    label: "Order Count"
+    description: "Total number of orders."
+    type: simple
+    type_params:
+      measure: order_count
+
+  - name: revenue_recognition_rate
+    label: "Revenue Recognition Rate"
+    description: >
+      Ratio of recognized (shipped) revenue to gross revenue.
+      Low values indicate a high backlog of unshipped orders.
+    type: derived
+    type_params:
+      expr: total_recognized_revenue / total_gross_revenue
+      metrics:
+        - name: total_recognized_revenue
+        - name: total_gross_revenue
+
+  # -------------------------------------------------------
+  # Refund Metrics
+  # -------------------------------------------------------
+
+  - name: total_refund_amount
+    label: "Total Refund Amount"
+    description: "Total refunded amount across all orders."
+    type: simple
+    type_params:
+      measure: refund_amount
+
+  - name: total_net_revenue
+    label: "Total Net Revenue"
+    description: "Net revenue after all refunds."
+    type: simple
+    type_params:
+      measure: net_revenue
+
+  - name: refund_base_gross_revenue
+    label: "Gross Revenue (Refund Base)"
+    description: "Gross revenue from the refund reconciliation model, used as refund rate denominator."
+    type: simple
+    type_params:
+      measure: refund_gross_revenue
+
+  - name: refund_rate
+    label: "Refund Rate"
+    description: >
+      Refund amount as a proportion of gross revenue.
+      Key audit metric for revenue integrity.
+    type: derived
+    type_params:
+      expr: total_refund_amount / refund_base_gross_revenue
+      metrics:
+        - name: total_refund_amount
+        - name: refund_base_gross_revenue
+
+  # -------------------------------------------------------
+  # Inventory Metrics
+  # -------------------------------------------------------
+
+  - name: total_inventory_value
+    label: "Total Inventory Value"
+    description: "Gross inventory value at cost as of fiscal year end."
+    type: simple
+    type_params:
+      measure: ending_inventory_value
+
+  - name: total_net_realizable_value
+    label: "Total Net Realizable Value"
+    description: "Inventory value after LCM adjustment."
+    type: simple
+    type_params:
+      measure: ending_nrv
+
+  - name: total_lcm_allowance
+    label: "Total LCM Allowance"
+    description: "Total LCM write-down allowance (balance sheet contra-asset)."
+    type: simple
+    type_params:
+      measure: lcm_allowance
+
+  - name: total_cogs
+    label: "Total COGS"
+    description: "Total Cost of Goods Sold for the period."
+    type: simple
+    type_params:
+      measure: period_cogs
+
+  - name: total_period_revenue
+    label: "Total Period Revenue"
+    description: "Total inventory-derived sales revenue for the period."
+    type: simple
+    type_params:
+      measure: period_revenue
+
+  - name: inventory_gross_profit
+    label: "Inventory Gross Profit"
+    description: "Gross profit from inventory sales (Revenue - COGS)."
+    type: derived
+    type_params:
+      expr: total_period_revenue - total_cogs
+      metrics:
+        - name: total_period_revenue
+        - name: total_cogs

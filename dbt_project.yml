@@ -49,6 +49,10 @@ models:
       +materialized: table
       +docs:
         node_color: "RoyalBlue"
+    utilities:
+      +materialized: table
+      +docs:
+        node_color: "#95A5A6"
 
 vars:
   incremental_lookback_days: 1
