@@ -87,4 +87,3 @@ models:
 
       - name: last_refund_at
         description: "The latest returned_at timestamp among all returned items in the order. Null if no items were returned."
-
