@@ -4,9 +4,11 @@ Schedule: 09:00 UTC daily
 
 Pipeline:
   1. generate_incremental_data  — append synthetic orders for today to the parquet sources
-  2. dbt_run_intermediate       — refresh int_order_items_aggregated view
-  3. dbt_run_marts              — incremental merge into fct_revenue, fct_order_recon, fct_refund_reconciliation
-  4. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
+  2. dbt_seed                   — reload audit_materiality_thresholds lookup table
+  3. dbt_run_snapshot           — refresh scd_products SCD Type 2 snapshot
+  4. dbt_run_intermediate       — refresh int_order_items_aggregated view
+  5. dbt_run_marts              — incremental merge into revenue, order_reconciliation, refund_reconciliation
+  6. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
 """
 
 import os
@@ -37,7 +39,7 @@ default_args = {
 
 with DAG(
     dag_id="dbt_daily_incremental",
-    description="Generate synthetic orders → dbt incremental run → dbt test",
+    description="Generate synthetic orders → dbt seed + snapshot → dbt incremental run → dbt test",
     schedule_interval="0 9 * * *",   # 09:00 UTC every day
     start_date=datetime(2026, 4, 22),
     catchup=False,
@@ -49,7 +51,39 @@ with DAG(
     generate_data = PythonOperator(
         task_id="generate_incremental_data",
         python_callable=run_generate_incremental,
-        doc_md="Append ~100 synthetic orders for today to incr_order_items.parquet and incr_orders.parquet.",
+        doc_md=(
+            "Append ~100 synthetic orders for today to incr_order_items.parquet, "
+            "incr_orders.parquet, and incr_inventory_items.parquet."
+        ),
+    )
+
+    dbt_seed = BashOperator(
+        task_id="dbt_seed",
+        bash_command=(
+            "cd $DBT_PROJECT_DIR && "
+            "dbt seed --select audit_materiality_thresholds --profiles-dir . --target dev"
+        ),
+        env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
+        append_env=True,
+        doc_md=(
+            "Reload the audit_materiality_thresholds lookup table from seeds/audit_materiality_thresholds.csv. "
+            "Runs daily so any threshold or risk-tier changes are applied without manual intervention."
+        ),
+    )
+
+    dbt_run_snapshot = BashOperator(
+        task_id="dbt_run_snapshot",
+        bash_command=(
+            "cd $DBT_PROJECT_DIR && "
+            "dbt snapshot --profiles-dir . --target dev"
+        ),
+        env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
+        append_env=True,
+        doc_md=(
+            "Refresh the scd_products SCD Type 2 snapshot. "
+            "Captures daily price / cost changes so inventory_fiscal_report can perform "
+            "point-in-time product lookups at fiscal year-end."
+        ),
     )
 
     dbt_run_int = BashOperator(
@@ -81,11 +115,14 @@ with DAG(
         task_id="dbt_test_incremental",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt test --select int_order_items_aggregated revenue order_reconciliation refund_reconciliation --profiles-dir . --target dev"
+            "dbt test --select "
+            "stg_incremental__order_items stg_incremental__orders stg_incremental__inventory_items "
+            "int_order_items_aggregated revenue order_reconciliation refund_reconciliation "
+            "--profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
         doc_md="Run dbt tests across all updated models to validate the daily pipeline output.",
     )
 
-    generate_data >> dbt_run_int >> dbt_run_marts >> dbt_test
+    generate_data >> dbt_seed >> dbt_run_snapshot >> dbt_run_int >> dbt_run_marts >> dbt_test
