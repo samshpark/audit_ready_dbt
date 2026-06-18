@@ -35,6 +35,9 @@ models:
       +materialized: view
       +docs:
         node_color: "MediumSeaGreen"
+      incremental:
+        +docs:
+          node_color: "#27AE60"
     testing:
       +materialized: view
       +tags: ['synthetic', 'test-fixture']

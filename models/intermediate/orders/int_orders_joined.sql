@@ -1,5 +1,7 @@
 WITH orders AS (
     SELECT * FROM {{ ref('stg_thelook_ecommerce__orders') }}
+    UNION ALL
+    SELECT * FROM {{ ref('stg_incremental__orders') }}
 ),
 
 order_items AS (

@@ -1,5 +1,7 @@
 WITH source_order_items AS (
     SELECT * FROM {{ ref('stg_thelook_ecommerce__order_items') }}
+    UNION ALL
+    SELECT * FROM {{ ref('stg_incremental__order_items') }}
 ),
 
 aggregate_items_to_order_grain AS (

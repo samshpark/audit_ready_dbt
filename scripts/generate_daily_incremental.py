@@ -24,10 +24,10 @@ import pandas as pd
 
 def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
     data_dir = os.path.join(project_dir, "data")
-    items_path    = os.path.join(data_dir, "raw_order_items.parquet")
-    orders_path   = os.path.join(data_dir, "raw_orders.parquet")
+    items_path    = os.path.join(data_dir, "incr_order_items.parquet")
+    orders_path   = os.path.join(data_dir, "incr_orders.parquet")
     users_path    = os.path.join(data_dir, "raw_users.parquet")
-    inv_path      = os.path.join(data_dir, "raw_inventory_items.parquet")
+    inv_path      = os.path.join(data_dir, "incr_inventory_items.parquet")
     products_path = os.path.join(data_dir, "raw_products.parquet")
 
     existing_items  = pd.read_parquet(items_path)

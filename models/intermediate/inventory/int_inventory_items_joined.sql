@@ -1,4 +1,4 @@
-WITH inbound AS ( 
+WITH inbound AS (
     SELECT
         inventory_item_id,
         product_id,
@@ -6,23 +6,40 @@ WITH inbound AS (
         product_name,
         product_brand,
         created_at AS inbound_at,
-        cost, 
+        cost,
         product_retail_price,
         product_department
-    FROM
-        {{ ref('stg_thelook_ecommerce__inventory_items') }}
+    FROM {{ ref('stg_thelook_ecommerce__inventory_items') }}
+    UNION ALL
+    SELECT
+        inventory_item_id,
+        product_id,
+        product_category,
+        product_name,
+        product_brand,
+        created_at AS inbound_at,
+        cost,
+        product_retail_price,
+        product_department
+    FROM {{ ref('stg_incremental__inventory_items') }}
 ),
 
 outbound AS (
-    SELECT 
+    SELECT
         inventory_item_id,
         product_id,
         shipped_at AS outbound_at,
         sale_price
-    FROM
-        {{ ref('stg_thelook_ecommerce__order_items') }}
-    WHERE
-        order_item_status NOT IN ('cancelled', 'returned', 'processing') -- only include 'shipped' & 'complete'
+    FROM {{ ref('stg_thelook_ecommerce__order_items') }}
+    WHERE order_item_status NOT IN ('cancelled', 'returned', 'processing')
+    UNION ALL
+    SELECT
+        inventory_item_id,
+        product_id,
+        shipped_at AS outbound_at,
+        sale_price
+    FROM {{ ref('stg_incremental__order_items') }}
+    WHERE order_item_status NOT IN ('cancelled', 'returned', 'processing')
 ),
 
 join_inbound_to_outbound AS (
