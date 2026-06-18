@@ -49,15 +49,18 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `stg_thelook_ecommerce__users.sql`
     - 📂 `stg_thelook_ecommerce__inventory_items.sql`
     - 📂 `_thelook_ecommerce__models.yml` — consolidated model documentation
-    - 📂 `__thelook_ecommerce__sources.yml` — source definitions
+    - 📂 `_thelook_ecommerce__sources.yml` — source definitions
 
-* **Testing Layer**:
-    - 📂 `models/testing/seed_order_items.sql`
+* **Testing Layer** (`models/testing/`):
+    - 📂 `seed_order_items.sql` — synthetic seed model that injects partial refund scenarios
+    - 📂 `_testing__models.yml` — column-level tests and description for the synthetic seed
 
 * **Intermediate Layer**:
     - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
     - 📂 `models/intermediate/orders/int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
     - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
+    - 📂 `models/intermediate/orders/_int_orders__models.yml` — consolidated model documentation
+    - 📂 `models/intermediate/inventory/_int_inventory__models.yml` — consolidated model documentation
 
 * **Marts (Audit Layer)** (`models/marts/finance/`):
     - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation.
