@@ -71,7 +71,10 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Utilities Layer** (`models/utilities/`):
     - 📂 `metricflow_time_spine.sql` — date spine table required by MetricFlow for time-based metric aggregation
 
-> **Materialization Strategy**: Staging and intermediate models are materialized as **views** — zero storage cost, always up-to-date. `order_reconciliation`, `revenue`, and `refund_reconciliation` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
+> **Materialization Strategy**:
+> - **Staging**: `view` — zero storage cost, always reflects the latest source data.
+> - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons: (1) `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times; (2) intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
+> - **Marts**: `order_reconciliation`, `revenue`, and `refund_reconciliation` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
