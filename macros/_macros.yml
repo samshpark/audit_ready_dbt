@@ -1,0 +1,26 @@
+version: 2
+
+macros:
+  - name: fiscal_year_end
+    description: >
+      Returns the fiscal year-end date (December 31st) as a DATE type for a given year column.
+      Used for period-end inventory valuation and point-in-time SCD joins in inventory_fiscal_report.
+    arguments:
+      - name: year_col
+        type: integer or column reference
+        description: >
+          The fiscal year value or column expression (e.g., 'y.fiscal_year').
+          Rendered directly into SQL as: CAST(<year_col> || '-12-31' AS DATE).
+
+  - name: datediff_days
+    description: >
+      Calculates the number of days between two date columns using DuckDB's DATEDIFF function.
+      Both inputs are cast to DATE before differencing to handle timestamp inputs safely.
+      Used in int_inventory_items_joined for aging duration and velocity bucket calculations.
+    arguments:
+      - name: start_col
+        type: column reference
+        description: The earlier date column (inbound date). Cast to DATE internally.
+      - name: end_col
+        type: column reference
+        description: The later date column (outbound date or current date). Cast to DATE internally.
