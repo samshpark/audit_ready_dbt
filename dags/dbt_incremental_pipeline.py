@@ -49,7 +49,7 @@ with DAG(
     generate_data = PythonOperator(
         task_id="generate_incremental_data",
         python_callable=run_generate_incremental,
-        doc_md="Append ~100 synthetic orders for today to raw_order_items.parquet and raw_orders.parquet.",
+        doc_md="Append ~100 synthetic orders for today to incr_order_items.parquet and incr_orders.parquet.",
     )
 
     dbt_run_int = BashOperator(
@@ -67,13 +67,13 @@ with DAG(
         task_id="dbt_run_marts",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select fct_revenue fct_order_recon fct_refund_reconciliation --profiles-dir . --target dev"
+            "dbt run --select revenue order_reconciliation refund_reconciliation --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
         doc_md=(
             "Incrementally merge updated orders into the three order-level mart models. "
-            "fct_inventory_fiscal_report is excluded — year-level aggregation requires full refresh."
+            "inventory_fiscal_report is excluded — year-level aggregation requires full refresh."
         ),
     )
 
@@ -81,7 +81,7 @@ with DAG(
         task_id="dbt_test_incremental",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt test --select int_order_items_aggregated fct_revenue fct_order_recon fct_refund_reconciliation --profiles-dir . --target dev"
+            "dbt test --select int_order_items_aggregated revenue order_reconciliation refund_reconciliation --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
