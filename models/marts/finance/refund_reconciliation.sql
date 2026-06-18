@@ -17,11 +17,9 @@ WITH reconciled AS (
         returned_item_count AS total_returned_items
     FROM {{ ref('int_order_items_aggregated') }}
     {% if is_incremental() %}
-    -- Only process orders touched by the most recent int_order_items_summary incremental run
     WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
        OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
     {% endif %}
-    -- FROM {{ ref('seed_order_items') }} - Used for the testing of the sql for partially refunded scenario
 ),
 
 final AS (

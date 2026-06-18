@@ -38,11 +38,6 @@ models:
       incremental:
         +docs:
           node_color: "#27AE60"
-    testing:
-      +materialized: view
-      +tags: ['synthetic', 'test-fixture']
-      +docs:
-        node_color: "#F1C40F"
     intermediate:
       +materialized: view
       +schema: intermediate
