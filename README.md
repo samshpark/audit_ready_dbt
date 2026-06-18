@@ -115,7 +115,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ![dbt Test Results](./images/test_results.png)
     * **Model Schema Tests** (column-level constraints & descriptions):
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
-        - 📂 `models/staging/thelook_ecommerce/__thelook_ecommerce__sources.yml`
+        - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__sources.yml`
         - 📂 `models/intermediate/inventory/_int_inventory__models.yml`
         - 📂 `models/intermediate/orders/_int_orders__models.yml`
         - 📂 `models/marts/finance/_finance__models.yml`
