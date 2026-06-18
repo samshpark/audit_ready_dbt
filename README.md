@@ -19,10 +19,13 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** files via API.
-* **Synthetic Engineering** (📂 `scripts/create_sample_order_items.py`): Generates **"Partial Refund"** scenarios to validate edge-case reconciliation logic.
+* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends ~100 synthetic orders daily — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable.
 * **Local Data Lake** (not tracked in git — regenerate via `scripts/ingest_data.py`):
-    - `data/raw_orders.parquet`, `raw_order_items.parquet`, `raw_products.parquet`, `raw_users.parquet`, `raw_inventory_items.parquet`
-    - 📂 `seeds/data_test_order_items.csv` (**Synthetic Seed** for logic verification)
+    - `data/raw_orders.parquet`, `raw_order_items.parquet`, `raw_products.parquet`, `raw_users.parquet`, `raw_inventory_items.parquet` — BigQuery-sourced, read-only
+    - `data/incr_orders.parquet`, `incr_order_items.parquet`, `incr_inventory_items.parquet` — Airflow-generated daily data
+* **Seeds** (`seeds/`):
+    - 📂 `seeds/audit_materiality_thresholds.csv` — CPA-defined audit risk tier and materiality threshold per product category (lookup table)
+    - 📂 `seeds/data_test_order_items.csv` — Synthetic partial refund scenarios for isolated unit testing (not connected to production pipeline)
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
@@ -51,8 +54,14 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `_thelook_ecommerce__models.yml` — consolidated model documentation
     - 📂 `_thelook_ecommerce__sources.yml` — source definitions
 
+* **Staging Layer — Incremental** (`models/staging/incremental/`):
+    - 📂 `stg_incremental__order_items.sql`
+    - 📂 `stg_incremental__orders.sql`
+    - 📂 `stg_incremental__inventory_items.sql`
+    - 📂 `_incremental__sources.yml` — source definitions pointing to `incr_*.parquet`
+
 * **Testing Layer** (`models/testing/`):
-    - 📂 `seed_order_items.sql` — synthetic seed model that injects partial refund scenarios
+    - 📂 `seed_order_items.sql` — exposes `data_test_order_items` seed as a queryable model for isolated unit testing; not connected to the production pipeline
     - 📂 `_testing__models.yml` — column-level tests and description for the synthetic seed
 
 * **Intermediate Layer**:
@@ -66,7 +75,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation.
     - 📂 `revenue.sql`: Accrual-based revenue recognition with cut-off risk detection.
     - 📂 `refund_reconciliation.sql`: Linking refunds to original orders.
-    - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, and turnover ratios by product and fiscal year.
+    - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, turnover ratios, and CPA-defined `risk_tier` / `materiality_threshold` per product category.
     - 📂 `_finance__models.yml` — consolidated model documentation
     - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
     - 📂 `_finance__metrics.yml` — business metric definitions
@@ -99,7 +108,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **File**: 📂 `dags/dbt_incremental_pipeline.py`
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
-    1. `generate_incremental_data` — Appends ~100 synthetic orders to parquet sources
+    1. `generate_incremental_data` — Appends ~100 synthetic orders (including 15% partial refund scenarios) to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
     2. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
     3. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`
     4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
@@ -129,6 +138,11 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `tests/assert_order_reconciliation_is_successful.sql`
         - 📂 `tests/assert_no_variance_in_order_recon.sql`
         - 📂 `tests/assert_revenue_recognition_logic.sql`
+    * **Audit Exception Analyses** (`analyses/`) — ad-hoc audit queries compiled via `dbt compile`, using `{{ ref() }}` for table references. Copy the rendered SQL from `target/compiled/` to run directly against DuckDB:
+        - 📂 `audit_inventory_exceptions.sql` — flags inventory equation imbalances (`audit_check_diff ≠ 0`), LCM write-down candidates, and slow-moving/obsolete stock
+        - 📂 `audit_revenue_cutoff_risk.sql` — surfaces cut-off risk orders (created in one month, shipped in another) and pending shipments with unrecognized revenue
+        - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
+        - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
 
 ### 7. Semantic Layer (MetricFlow)
 
@@ -213,22 +227,15 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Revenue Reversal Integrity**: Ensured accurate **Net Revenue** calculation by accounting for historical reversals, eliminating the risk of overstated top-line metrics.
 * **Audit Trail**: Created a `refund_type` classification and `refund_rate` metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
 
-    - **Challenge**: The thelook_ecommerce dataset on BigQuery synchronizes statuses at the order-header level, meaning all items within a single `order_id` share the same status. This results in a lack of **"Partial Refund"** scenarios, which are critical for real-world e-commerce revenue reconciliation and accurate net revenue calculation.
+    - **Data Limitation (Acknowledged)**: The thelook_ecommerce BigQuery dataset synchronizes statuses at the order-header level — all items within a single `order_id` share the same status. As a result, **partial refund scenarios are structurally absent from the historical source data**. This is a known limitation of the dataset, not a pipeline issue.
 
-    - **Solution**: To validate the robustness of the reconciliation logic, I implemented a **Unit Testing** environment using **dbt Seeds**.
+    - **Two-Track Approach**:
 
-        1. **Automated Synthetic Data Generation (via Python)**: Developed a Python script (📂 `scripts/create_sample_order_items.py`) to programmatically generate synthetic transactional data. This script was specifically engineered to simulate "multi-item orders with mix statuses" (e.g. one item completed, another returned within same `order_id`), which were missing in the original production dataset.
-            - Result file: 📂 `seeds/data_test_order_items.csv`
+        1. **Ongoing Simulation via Airflow** (📂 `scripts/generate_daily_incremental.py`): The daily pipeline generates synthetic orders that include partial refund scenarios (15% probability — one item returned, another completed within the same `order_id`). These flow through a dedicated staging layer (`stg_incremental__*`) and UNION into the intermediate models alongside BigQuery data — ensuring partial refund detection logic is continuously exercised on incoming data.
 
-        2. **Isolated Test Environment**: Constructed a separate test model to validate the aggregation logic in isolation, ensuring that the integrity of the core production data remained uncompromised.
+        2. **Isolated Unit Testing via dbt Seed** (📂 `seeds/data_test_order_items.csv`): A fixed, deterministic set of 5,000 synthetic order items — covering fully refunded, partially refunded, and no-refund scenarios — generated by 📂 `scripts/create_sample_order_items.py`. Exposed as a queryable model (`models/testing/seed_order_items.sql`) for isolated logic verification, but intentionally kept separate from the production pipeline to preserve source integrity.
 
-        3. **Logic Verification**: Successfully verified that the model accurately **links individual events back to their original** `order_id`, correctly identifying 'PARTIALLY REFUNDED' cases and calculating precise refund rates and values.
-
-    - **Reliability** - Idempotency: Established an idempotent test pipeline by integrating python-based synthetic data generation with dbt seeds, ensuring consistent and reproducible testing environments on demand.
-
-    - **Precision** - Edge Case Handling: Implemented robust edge case handling to distinguish between 'Fully Refunded' and 'Partially Refunded' orders, eliminating potential reconciliation gap and ensuring 100% revenue accuracy.
-
-    - **Engineering Value: Future Proof Modeling**: Although the current source data lacks partial refund variety, I designed this logic to be **future-proof**. By simulating these scenarios, I've ensured the model is ready for complex, real-world transactional environments—moving beyond simple data transformation to **proactive business logic modeling**.
+    - **Logic Verification**: The reconciliation model accurately links refund events back to their original `order_id`, correctly identifying 'PARTIALLY REFUNDED' cases and calculating precise `refund_count_rate` and `refund_value_rate`.
 
 ### 4. Financial Inventory Control & Valuation (Specific Identification)
 * **File**: 📂 `models/marts/finance/inventory_fiscal_report.sql`
@@ -236,6 +243,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**.
 * **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` against the **period-end market price** sourced from the `scd_products` Type 2 snapshot (effective as of December 31st of each fiscal year). This ensures the LCM write-down reflects actual year-end market conditions — not the price frozen at inbound receipt — calculating the correct "Allowance for Inventory Valuation" for Balance Sheet reporting.
 * **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
+* **Audit Materiality by Category**: Joined 📂 `seeds/audit_materiality_thresholds.csv` — a CPA-defined lookup table assigning `risk_tier` (High / Medium / Low) and `materiality_threshold` ($10K / $5K / $2.5K) to each of the 26 product categories — directly into the mart. This exposes category-level audit priority alongside financial metrics, enabling threshold-based exception filtering without hardcoded values.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
 #### Model Detail: inventory_fiscal_report
@@ -303,22 +311,28 @@ pip install dbt-duckdb dbt-bigquery google-cloud-bigquery pandas pyarrow dbt-met
 python scripts/ingest_data.py
 ```
 
-5. **Create synthetic test data**
+5. **Initialize Airflow incremental data**
 ```bash
-# Generates partial refund scenarios for seed-based testing
+# Generates the initial incr_*.parquet files used by the Airflow pipeline
+python scripts/generate_daily_incremental.py
+```
+
+6. **Create isolated unit test seed (optional)**
+```bash
+# Generates deterministic partial refund scenarios for isolated logic testing
 python scripts/create_sample_order_items.py
 ```
 
-6. **Run dbt Pipeline**
+7. **Run dbt Pipeline**
 ```bash
 dbt deps      # install dbt packages (dbt_utils)
-dbt seed      # load synthetic test data
+dbt seed      # load seeds (audit_materiality_thresholds + data_test_order_items)
 dbt snapshot  # build scd_products price history
 dbt run       # execute all models
 dbt test      # validate all tests
 ```
 
-7. **Query metrics via Semantic Layer**
+8. **Query metrics via Semantic Layer**
 ```bash
 # Validate semantic model definitions
 mf validate-configs
