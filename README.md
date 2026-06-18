@@ -36,9 +36,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Layered Architecture**: Implemented a 4-tier structure (Staging → Intermediate → Marts → Semantic Layer) to ensure data traceability.
 * **Color-Coded Nodes**:
     - 🟢 Light Green: Raw Sources
-    - 🟤 Brown: Seeds (Generated synthetic data)
+    - 🟤 Brown: Seeds (Lookup tables)
     - 🟩 MediumSeaGreen: Staging Layer (Initial cleaning and casting)
-    - 🟡 Yellow: Synthetic Test Layer (Partial Refund Scenario injection)
     - 🟠 Orange: Intermediate Layer
     - 🔵 RoyalBlue: Final Financial Marts
     - 🔴 Red: Automated Data Quality Tests
@@ -105,15 +104,19 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
     1. `generate_incremental_data` — Appends ~100 synthetic orders (including 15% partial refund scenarios) to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
-    2. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
-    3. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`
-    4. `dbt_test_incremental` — Runs all tests on updated models to validate pipeline output
+    2. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
+    3. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
+    4. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
+    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`
+    6. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
+
+> **Note**: Steps 2–3 run sequentially (not in parallel) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time.
 
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
 *DAG list — `dbt_daily_incremental` active and scheduled daily at 09:00 UTC*
 
 ![Airflow DAG Runs](./images/airflow_dag_runs.png)
-*Grid view — all 4 tasks completing successfully across daily runs (Apr–Jun)*
+*Grid view — all 6 tasks completing successfully across daily runs (Apr–Jun)*
 
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`
@@ -275,41 +278,51 @@ The following features are planned for future development:
 
 ## 7. Getting Started
 
-### 1. Installation & Execution
+**Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
-1. **Clone the repository**
+### Step 1 — Clone the repository
 ```bash
 git clone https://github.com/samshpark/audit_ready_dbt.git
 cd audit_ready_dbt
 ```
 
-2. **Setup Virtual Environment & Install dependencies**
-```bash
-# Create and activate venv
-python3 -m venv venv
-source venv/bin/activate
-
-# Install required packages
-pip install dbt-duckdb dbt-bigquery google-cloud-bigquery pandas pyarrow dbt-metricflow
+### Step 2 — Create `profiles.yml`
+`profiles.yml` is excluded from git. Create it manually in the project root:
+```yaml
+audit_ready_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: dev.duckdb
 ```
 
-3. **Set up BigQuery credentials**
-    - Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts) with **BigQuery Data Viewer** and **BigQuery Job User** roles
-    - Download the JSON key and save it to `credentials/google_creds.json` (excluded from git)
-
-4. **Ingest data from BigQuery**
+### Step 3 — Set up local Python environment
 ```bash
-# Fetches raw data via Google API and saves Parquet files to /data (not tracked in git)
+python3 -m venv venv
+source venv/bin/activate
+pip install dbt-duckdb dbt-metricflow google-cloud-bigquery pandas pyarrow
+```
+
+### Step 4 — Set up BigQuery credentials
+- Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts) with **BigQuery Data Viewer** and **BigQuery Job User** roles
+- Download the JSON key and save it to `credentials/google_creds.json` (excluded from git)
+
+### Step 5 — Ingest data from BigQuery
+```bash
+# Pulls ~100K orders from the public thelook_ecommerce dataset
+# and saves raw_*.parquet to data/ (not tracked in git)
 python scripts/ingest_data.py
 ```
 
-5. **Initialize Airflow incremental data**
+### Step 6 — Initialize incremental parquet files
 ```bash
-# Generates the initial incr_*.parquet files used by the Airflow pipeline
+# Creates the initial incr_*.parquet files that Airflow appends to daily
+# Run from the project root
 python scripts/generate_daily_incremental.py
 ```
 
-6. **Run dbt Pipeline**
+### Step 7 — Run dbt pipeline (one-time full build)
 ```bash
 dbt deps      # install dbt packages (dbt_utils)
 dbt seed      # load audit_materiality_thresholds lookup table
@@ -318,7 +331,18 @@ dbt run       # execute all models
 dbt test      # validate all tests
 ```
 
-7. **Query metrics via Semantic Layer**
+### Step 8 — Start Airflow
+```bash
+# Builds the Docker image and starts Postgres, webserver, and scheduler
+docker-compose up -d
+
+# Wait ~30 seconds for containers to become healthy, then verify
+docker ps
+```
+Open **http://localhost:8080** and log in with `admin` / `admin`.
+Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC daily, or trigger it manually from the UI.
+
+### Step 9 — Query metrics via Semantic Layer
 ```bash
 # Validate semantic model definitions
 mf validate-configs
