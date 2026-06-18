@@ -59,6 +59,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `stg_incremental__orders.sql`
     - 📂 `stg_incremental__inventory_items.sql`
     - 📂 `_incremental__sources.yml` — source definitions pointing to `incr_*.parquet`
+    - 📂 `_incremental__models.yml` — consolidated model documentation
 
 * **Testing Layer** (`models/testing/`):
     - 📂 `seed_order_items.sql` — exposes `data_test_order_items` seed as a queryable model for isolated unit testing; not connected to the production pipeline
