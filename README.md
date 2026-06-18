@@ -80,7 +80,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 > - **Marts**: `order_reconciliation`, `revenue`, and `refund_reconciliation` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
 
 #### Jinja Macros
-Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain.
+Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain. Documented in 📂 `macros/_macros.yml`.
 
 | Macro | Usage | Purpose |
 |---|---|---|
