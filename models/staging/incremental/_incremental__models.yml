@@ -1,0 +1,85 @@
+version: 2
+
+models:
+  - name: stg_incremental__order_items
+    description: >
+      Staging model for Airflow-generated daily synthetic order line items (incr_order_items.parquet).
+      Uses negative IDs to avoid collision with BigQuery-sourced data.
+      Includes partial refund scenarios (15% probability) — one item returned, another completed
+      within the same order_id — which are structurally absent from the BigQuery source.
+      Unioned with stg_thelook_ecommerce__order_items in int_order_items_aggregated.
+    columns:
+      - name: order_item_id
+        description: "Synthetic item ID (negative integer, cast to STRING)."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Synthetic order ID (negative integer, cast to STRING)."
+        tests:
+          - not_null
+      - name: user_id
+        description: "Sampled from real BigQuery user IDs to maintain referential plausibility."
+        tests:
+          - not_null
+      - name: product_id
+        description: "Sampled from real BigQuery product IDs."
+        tests:
+          - not_null
+      - name: order_item_status
+        description: "Item-level status (lowercase). Partial refund orders have mixed statuses within the same order_id."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['complete', 'returned', 'shipped', 'processing', 'cancelled']
+      - name: sale_price
+        description: "Randomly assigned sale price between $20 and $200."
+        tests:
+          - not_null
+
+  - name: stg_incremental__orders
+    description: >
+      Staging model for Airflow-generated daily synthetic order headers (incr_orders.parquet).
+      Each row corresponds to one or more line items in stg_incremental__order_items.
+      Unioned with stg_thelook_ecommerce__orders in int_orders_joined.
+    columns:
+      - name: order_id
+        description: "Synthetic order ID (negative integer, cast to STRING)."
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Sampled from real BigQuery user IDs."
+        tests:
+          - not_null
+      - name: order_status
+        description: "Header-level status (lowercase). Reflects the dominant item status for the order."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['complete', 'returned', 'shipped', 'processing', 'cancelled']
+      - name: created_at
+        description: "Order creation timestamp (UTC). Fixed to today's date during Airflow run."
+        tests:
+          - not_null
+
+  - name: stg_incremental__inventory_items
+    description: >
+      Staging model for Airflow-generated daily synthetic inventory inbound records (incr_inventory_items.parquet).
+      Each inventory item is paired with a corresponding order item in stg_incremental__order_items
+      via inventory_item_id. Created 7–60 days before the order to simulate realistic warehouse lead time.
+      Unioned with stg_thelook_ecommerce__inventory_items in int_inventory_items_joined.
+    columns:
+      - name: inventory_item_id
+        description: "Synthetic inventory item ID (negative integer, cast to STRING)."
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        description: "Sampled from real BigQuery product IDs."
+        tests:
+          - not_null
+      - name: cost
+        description: "Product acquisition cost sourced from the real product catalog."
+      - name: product_category
+        description: "Product category (lowercase), sourced from the real product catalog."
