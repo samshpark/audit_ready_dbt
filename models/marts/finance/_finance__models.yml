@@ -7,7 +7,7 @@ models:
       Links Balance Sheet (Inventory Value) and Profit & Loss (COGS) metrics
       to provide an audit-ready view of inventory flow per product per fiscal year.
     config:
-      tags: ['financial', 'inventory_valuation', 'audit_ready']
+      tags: ['financial', 'audit_ready']
 
     tests:
       - dbt_utils.unique_combination_of_columns:

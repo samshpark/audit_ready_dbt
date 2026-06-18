@@ -9,7 +9,7 @@ models:
       sub-ledger for revenue recognition and refund liability reporting.
 
     config:
-      tags: ['financial', 'order_level', 'audit_ready']
+      tags: ['financial', 'audit_ready']
 
     columns:
       - name: order_id

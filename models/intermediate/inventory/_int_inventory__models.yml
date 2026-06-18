@@ -9,7 +9,7 @@ models:
       Lower of Cost or Market (LCM) valuation and aging-based categorization.
 
     config:
-      tags: ['financial', 'inventory_level', 'audit_ready']
+      tags: ['financial', 'audit_ready']
 
     columns:
       - name: inventory_item_id

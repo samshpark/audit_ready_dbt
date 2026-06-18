@@ -1,5 +1,5 @@
 {{ config(
-    tags=['financial', 'inventory_valuation', 'audit_ready']
+    tags=['financial', 'audit_ready']
 ) }}
 
 WITH base_ledger AS (
