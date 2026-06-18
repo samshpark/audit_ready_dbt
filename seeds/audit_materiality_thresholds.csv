@@ -1,0 +1,27 @@
+product_category,risk_tier,materiality_threshold,rationale
+outerwear & coats,High,10000,High unit cost with significant seasonal obsolescence risk
+suits & sport coats,High,10000,High unit cost with occasion-driven demand and style obsolescence
+suits,High,10000,High unit cost with occasion-specific demand sensitivity
+blazers & jackets,High,10000,High unit cost with multi-season but trend-sensitive demand
+dresses,Medium,5000,Moderate unit cost with seasonal and occasion-based demand fluctuation
+sweaters,Medium,5000,Moderate unit cost with seasonal demand and obsolescence risk
+fashion hoodies & sweatshirts,Medium,5000,Moderate unit cost with trend-sensitive demand cycles
+jeans,Medium,5000,Moderate unit cost with relatively stable but fit-sensitive demand
+pants,Medium,5000,Moderate unit cost with stable demand across seasons
+pants & capris,Medium,5000,Moderate unit cost with seasonal demand variation
+active,Medium,5000,Moderate unit cost in a growth category with moderate turnover risk
+accessories,Medium,5000,Diverse unit value with elevated shrinkage and theft risk
+maternity,Medium,5000,Niche demand segment with moderate unit cost and lifecycle risk
+plus,Medium,5000,Specialty sizing with moderate unit cost and demand sensitivity
+skirts,Medium,5000,Moderate unit cost with seasonal and trend-driven demand
+jumpsuits & rompers,Medium,5000,Moderate unit cost with trend-sensitive and seasonal demand
+clothing sets,Medium,5000,Moderate aggregate value with bundled item complexity
+intimates,Low,2500,Low unit cost with stable recurring demand
+swim,Low,2500,Low-to-moderate unit cost with highly seasonal and rapid obsolescence
+tops & tees,Low,2500,Low unit cost with high volume and stable replenishment demand
+sleep & lounge,Low,2500,Low unit cost with stable year-round demand
+shorts,Low,2500,Low unit cost with highly seasonal and concentrated demand window
+underwear,Low,2500,Low unit cost with stable and predictable demand
+leggings,Low,2500,Low unit cost with stable demand and moderate trend sensitivity
+socks,Low,2500,Very low unit cost with high volume and minimal obsolescence risk
+socks & hosiery,Low,2500,Very low unit cost with high volume and minimal obsolescence risk

@@ -82,51 +82,57 @@ final_report AS (
 
 final AS (
 
-    SELECT 
-        fiscal_year,
-        product_id,
-        product_name,
-        product_category,
-        product_brand,
-        period_units_sold,
-        period_cogs_amount,
-        period_revenue,
-        beginning_inv_value,
-        period_purchase_amount,
-        ending_gross_inv_value,
-        ending_inv_qty, 
-        ending_allowance_lcm,
-        ending_net_realizable_value,
-        avg_days_on_hand_at_year_end,
+    SELECT
+        fr.fiscal_year,
+        fr.product_id,
+        fr.product_name,
+        fr.product_category,
+        fr.product_brand,
+        fr.period_units_sold,
+        fr.period_cogs_amount,
+        fr.period_revenue,
+        fr.beginning_inv_value,
+        fr.period_purchase_amount,
+        fr.ending_gross_inv_value,
+        fr.ending_inv_qty,
+        fr.ending_allowance_lcm,
+        fr.ending_net_realizable_value,
+        fr.avg_days_on_hand_at_year_end,
 
         -- 1. Inventory Reconciliation & Audit Check
             -- Formula: (Beginning + Purchase - Ending) - COGS
             -- This should ideally be 0. Discrepancies indicate:
                 --   (+) Positive: Inventory Shrinkage (Unrecorded loss, theft, or breakage)
                 --   (-) Negative: Surplus/Ghost Inventory (Unrecorded receipts or COGS overstatement)
-        
+
         CASE
-            WHEN ABS((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount) <= 0.019
+            WHEN ABS((fr.beginning_inv_value + fr.period_purchase_amount - fr.ending_gross_inv_value) - fr.period_cogs_amount) <= 0.019
             -- Tolerance of $0.019 accounts for floating-point rounding error accumulated from
             -- ROUND(..., 2) applied to individual item-level costs across multiple aggregations.
             -- Any variance exceeding this threshold is a real discrepancy and flagged for investigation.
             THEN 0
-            ELSE ROUND((beginning_inv_value + period_purchase_amount - ending_gross_inv_value) - period_cogs_amount, 2)
+            ELSE ROUND((fr.beginning_inv_value + fr.period_purchase_amount - fr.ending_gross_inv_value) - fr.period_cogs_amount, 2)
         END AS audit_check_diff,
-        
-        -- 2. 재무 비율 (Financial Ratios)
-        ROUND(period_cogs_amount / NULLIF((beginning_inv_value + ending_gross_inv_value) / 2, 0), 3) AS inventory_turnover_ratio,
-        ROUND((period_revenue - period_cogs_amount) / NULLIF(period_revenue, 0), 4) AS gross_profit_margin,
 
-        -- 3. 리스크 평가 (Risk Assessment)
-        CASE 
-            WHEN avg_days_on_hand_at_year_end > 365*4 THEN 'Critical: Obsolete'
-            WHEN avg_days_on_hand_at_year_end > 365*2 THEN 'Warning: Slow Moving'
-            WHEN ending_net_realizable_value < (ending_gross_inv_value - 0.01) THEN 'Adjustment Required: NRV < Cost'
+        -- 2. Financial Ratios
+        ROUND(fr.period_cogs_amount / NULLIF((fr.beginning_inv_value + fr.ending_gross_inv_value) / 2, 0), 3) AS inventory_turnover_ratio,
+        ROUND((fr.period_revenue - fr.period_cogs_amount) / NULLIF(fr.period_revenue, 0), 4) AS gross_profit_margin,
+
+        -- 3. Risk Assessment
+        CASE
+            WHEN fr.avg_days_on_hand_at_year_end > 365*4 THEN 'Critical: Obsolete'
+            WHEN fr.avg_days_on_hand_at_year_end > 365*2 THEN 'Warning: Slow Moving'
+            WHEN fr.ending_net_realizable_value < (fr.ending_gross_inv_value - 0.01) THEN 'Adjustment Required: NRV < Cost'
             ELSE 'Healthy'
-        END AS inventory_risk_rating
+        END AS inventory_risk_rating,
 
-    FROM final_report
+        -- 4. Audit Metadata (from audit_materiality_thresholds seed)
+        mat.risk_tier,
+        mat.materiality_threshold
+
+    FROM final_report fr
+    LEFT JOIN {{ ref('audit_materiality_thresholds') }} mat
+        ON fr.product_category = mat.product_category
 )
 
 SELECT * FROM final

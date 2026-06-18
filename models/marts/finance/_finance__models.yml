@@ -79,6 +79,18 @@ models:
           - accepted_values:
               values: ['Healthy', 'Warning: Slow Moving', 'Critical: Obsolete', 'Adjustment Required: NRV < Cost']
 
+      - name: risk_tier
+        description: "Audit risk tier sourced from audit_materiality_thresholds seed: High / Medium / Low."
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Medium', 'Low']
+
+      - name: materiality_threshold
+        description: >
+          Minimum USD variance that warrants auditor investigation for this product category.
+          Sourced from audit_materiality_thresholds seed (High=$10,000 / Medium=$5,000 / Low=$2,500).
+
   - name: order_reconciliation
     description: >
       Master-to-subledger reconciliation at order level.
