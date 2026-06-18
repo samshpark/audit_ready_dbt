@@ -49,6 +49,8 @@ models:
       +materialized: table
       +docs:
         node_color: "RoyalBlue"
+      finance:
+        +schema: finance
     utilities:
       +materialized: table
       +docs:
