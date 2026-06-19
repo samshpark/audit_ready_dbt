@@ -8,7 +8,7 @@ aggregate_items_to_order_grain AS (
     SELECT
         order_id,
         user_id,
-        STRING_AGG(DISTINCT order_item_status ORDER BY order_item_status) AS order_item_status_agg,
+        STRING_AGG(DISTINCT order_item_status ORDER BY order_item_status) AS order_item_status_list,
         COUNT(*)                                                           AS subledger_item_count,
         ROUND(SUM(sale_price), 2)                                         AS total_order_amount,
         MIN(created_at)                                                    AS first_item_created_at,

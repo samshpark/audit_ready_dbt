@@ -42,7 +42,7 @@ sources:
           - name: delivered_at
             description: "Order Delivered Date; Null if not delivered"
           - name: num_of_item
-            description: "Number of items included in an order"
+            description: "Number of items included in an order (renamed to number_of_items in staging)"
       
       - name: raw_order_items
         description: "Granular table containing individual line items per order."

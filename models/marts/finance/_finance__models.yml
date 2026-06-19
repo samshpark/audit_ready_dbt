@@ -114,7 +114,7 @@ models:
         description: "Total order amount from subledger (sum of sale_price per order)."
 
       - name: master_item_count
-        description: "Item count from master table (raw_orders.num_of_item)."
+        description: "Item count from master table (raw_orders.num_of_item, renamed to number_of_items in staging)."
 
       - name: subledger_item_count
         description: "Item count from subledger (COUNT of raw_order_items per order)."

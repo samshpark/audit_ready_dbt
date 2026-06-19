@@ -16,7 +16,7 @@ final AS (
         -- Master ledger columns (stg_orders)
         o.order_id                           AS master_order_id,
         o.order_status                       AS master_order_status,
-        o.num_of_item                        AS master_item_count,
+        o.number_of_items                    AS master_item_count,
         o.created_at,
         o.shipped_at,
         o.returned_at,
@@ -24,7 +24,7 @@ final AS (
 
         -- Subledger columns (int_order_items_aggregated)
         oi.order_id                          AS subledger_order_id,
-        oi.order_item_status_agg             AS subledger_order_status,
+        oi.order_item_status_list            AS subledger_order_status,
         oi.subledger_item_count,
         oi.total_order_amount,
         oi.first_item_created_at,

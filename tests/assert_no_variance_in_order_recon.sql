@@ -16,8 +16,8 @@ WHERE r.order_item_count_recon = 'VARIANCE DETECTED'
        r.order_status_recon = 'VARIANCE DETECTED'
        AND NOT (i.returned_item_count > 0 AND i.returned_item_count < i.subledger_item_count)
        AND NOT (
-           i.order_item_status_agg LIKE '%shipped%'
-           AND i.order_item_status_agg LIKE '%complete%'
+           i.order_item_status_list LIKE '%shipped%'
+           AND i.order_item_status_list LIKE '%complete%'
            AND i.returned_item_count = 0
        )
    )

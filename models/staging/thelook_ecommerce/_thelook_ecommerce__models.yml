@@ -113,7 +113,7 @@ models:
         description: "Shipment timestamp (UTC)"
       - name: delivered_at
         description: "Delivery timestamp (UTC)"
-      - name: num_of_item
+      - name: number_of_items
         description: "Number of items in the order"
         tests:
           - not_null

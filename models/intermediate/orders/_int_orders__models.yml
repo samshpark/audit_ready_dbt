@@ -26,7 +26,7 @@ models:
               to: ref('stg_thelook_ecommerce__users')
               field: user_id
 
-      - name: order_item_status_agg
+      - name: order_item_status_list
         description: >
           A comma-separated, alphabetically ordered string of all distinct item statuses
           within the order (e.g., 'complete,returned,shipped'). Useful for quickly
@@ -107,7 +107,7 @@ models:
       - name: master_order_status
         description: "Order status from the master ledger."
       - name: master_item_count
-        description: "Item count from the master ledger (num_of_item)."
+        description: "Item count from the master ledger (number_of_items)."
       - name: created_at
         description: "Order creation timestamp from the master ledger."
       - name: shipped_at

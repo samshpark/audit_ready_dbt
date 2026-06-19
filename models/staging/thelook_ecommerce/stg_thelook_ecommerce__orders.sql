@@ -11,7 +11,7 @@ renamed AS (
         CAST(returned_at AS TIMESTAMP) AS returned_at,
         CAST(shipped_at AS TIMESTAMP) AS shipped_at,
         CAST(delivered_at AS TIMESTAMP) AS delivered_at,
-        num_of_item
+        num_of_item AS number_of_items
     FROM
         source
 )
