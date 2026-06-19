@@ -11,8 +11,7 @@ credentials/
 profiles.yml
 dev.duckdb
 
-# Raw data files - regenerate via scripts/ingest_data.py or generate_daily_incremental.py
-data/*.parquet
+# Raw data files are tracked in git for reviewer convenience (total ~4.5MB)
 
 .DS_Store
 venv/

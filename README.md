@@ -280,6 +280,8 @@ The following features are planned for future development:
 
 **Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
+> **Note for reviewers**: All `data/*.parquet` files (~4.5 MB total) are included in this repository for convenience. **Steps 4–6 (BigQuery ingestion and incremental data initialization) can be skipped** — the pipeline runs immediately with the pre-built data files.
+
 ### Step 1 — Clone the repository
 ```bash
 git clone https://github.com/samshpark/audit_ready_dbt.git
