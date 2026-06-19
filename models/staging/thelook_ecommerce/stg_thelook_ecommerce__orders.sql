@@ -3,15 +3,15 @@ WITH source AS (
 ),
 renamed AS (
     SELECT
-        CAST(order_id AS STRING) AS order_id,
-        CAST(user_id AS STRING) AS user_id,
-        LOWER(status) AS order_status,
-        LOWER(gender) AS user_gender,
-        CAST(created_at AS TIMESTAMP) AS created_at,
-        CAST(returned_at AS TIMESTAMP) AS returned_at,
-        CAST(shipped_at AS TIMESTAMP) AS shipped_at,
-        CAST(delivered_at AS TIMESTAMP) AS delivered_at,
-        num_of_item AS number_of_items
+        CAST(order_id AS STRING)        AS order_id,
+        CAST(user_id AS STRING)         AS user_id,
+        LOWER(status)                   AS order_status,
+        LOWER(gender)                   AS user_gender,
+        num_of_item                     AS number_of_items,
+        CAST(created_at AS TIMESTAMP)   AS created_at,
+        CAST(returned_at AS TIMESTAMP)  AS returned_at,
+        CAST(shipped_at AS TIMESTAMP)   AS shipped_at,
+        CAST(delivered_at AS TIMESTAMP) AS delivered_at
     FROM
         source
 )

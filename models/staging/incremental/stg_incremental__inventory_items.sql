@@ -3,18 +3,18 @@ WITH source AS (
 ),
 renamed AS (
     SELECT
-        CAST(id AS STRING)                    AS inventory_item_id,
-        CAST(product_id AS STRING)            AS product_id,
-        CAST(created_at AS TIMESTAMP)         AS created_at,
-        CAST(sold_at AS TIMESTAMP)            AS sold_at,
-        CAST(cost AS DOUBLE)                  AS cost,
-        LOWER(product_category)               AS product_category,
+        CAST(id AS STRING)                   AS inventory_item_id,
+        CAST(product_id AS STRING)           AS product_id,
+        product_distribution_center_id,
+        LOWER(product_category)              AS product_category,
         product_name,
         product_brand,
-        CAST(product_retail_price AS DOUBLE)  AS product_retail_price,
-        LOWER(product_department)             AS product_department,
+        LOWER(product_department)            AS product_department,
         product_sku,
-        product_distribution_center_id
+        CAST(cost AS DOUBLE)                 AS cost,
+        CAST(product_retail_price AS DOUBLE) AS product_retail_price,
+        CAST(created_at AS TIMESTAMP)        AS created_at,
+        CAST(sold_at AS TIMESTAMP)           AS sold_at
     FROM source
 )
 SELECT * FROM renamed
