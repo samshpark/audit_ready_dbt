@@ -1,20 +1,20 @@
-WITH source AS (
-    SELECT * FROM {{ source('thelook_ecommerce', 'raw_products') }}
+with source as (
+    select * from {{ source('thelook_ecommerce', 'raw_products') }}
 ),
 
-renamed AS (
-    SELECT
-        CAST(id AS STRING) AS product_id,
-        CAST(distribution_center_id AS STRING) AS distribution_center_id,
-        LOWER(category) AS category,
+renamed as (
+    select
+        cast(id as string) as product_id,
+        cast(distribution_center_id as string) as distribution_center_id,
+        lower(category) as category,
         name,
         brand,
         department,
         sku,
-        CAST(cost AS DOUBLE) AS cost,
-        CAST(retail_price AS DOUBLE) AS retail_price
-    FROM
+        cast(cost as double) as cost,
+        cast(retail_price as double) as retail_price
+    from
         source
 )
 
-SELECT * FROM renamed
+select * from renamed

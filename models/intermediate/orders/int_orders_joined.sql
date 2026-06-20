@@ -1,39 +1,41 @@
-WITH orders AS (
-    SELECT * FROM {{ ref('stg_thelook_ecommerce__orders') }}
-    UNION ALL
-    SELECT * FROM {{ ref('stg_incremental__orders') }}
+with orders as (
+    select * from {{ ref('stg_thelook_ecommerce__orders') }}
+    union all
+    select * from {{ ref('stg_incremental__orders') }}
 ),
 
-order_items AS (
-    SELECT * FROM {{ ref('int_order_items_aggregated') }}
+int_order_items_aggregated as (
+    select * from {{ ref('int_order_items_aggregated') }}
 ),
 
-final AS (
-    SELECT
-        COALESCE(oi.order_id, o.order_id) AS order_id,
-        COALESCE(oi.user_id, o.user_id) AS user_id,
+final as (
+    select
+        coalesce(order_items.order_id, orders.order_id) as order_id,
+        coalesce(order_items.user_id, orders.user_id) as user_id,
 
-        -- Master ledger columns (stg_orders)
-        o.order_id AS master_order_id,
-        o.order_status AS master_order_status,
-        o.number_of_items AS master_item_count,
-        o.created_at,
-        o.shipped_at,
-        o.returned_at,
-        o.delivered_at,
+        {# Master ledger columns (stg_orders) #}
 
-        -- Subledger columns (int_order_items_aggregated)
-        oi.order_id AS subledger_order_id,
-        oi.order_item_status_list AS subledger_order_status,
-        oi.subledger_item_count,
-        oi.total_order_amount,
-        oi.first_item_created_at,
-        oi.returned_item_count,
-        oi.refund_amount,
-        oi.last_refund_at
+        orders.order_id as master_order_id,
+        orders.order_status as master_order_status,
+        orders.number_of_items as master_item_count,
+        orders.created_at,
+        orders.shipped_at,
+        orders.returned_at,
+        orders.delivered_at,
 
-    FROM order_items AS oi
-    FULL JOIN orders AS o ON oi.order_id = o.order_id
+        {# Subledger columns (int_order_items_aggregated) #}
+
+        order_items.order_id as subledger_order_id,
+        order_items.order_item_status_list as subledger_order_status,
+        order_items.subledger_item_count,
+        order_items.total_order_amount,
+        order_items.first_item_created_at,
+        order_items.returned_item_count,
+        order_items.refund_amount,
+        order_items.last_refund_at
+
+    from int_order_items_aggregated as order_items
+    full join orders on order_items.order_id = orders.order_id
 )
 
-SELECT * FROM final
+select * from final

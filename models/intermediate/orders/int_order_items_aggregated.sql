@@ -1,28 +1,28 @@
-WITH source_order_items AS (
-    SELECT * FROM {{ ref('stg_thelook_ecommerce__order_items') }}
-    UNION ALL
-    SELECT * FROM {{ ref('stg_incremental__order_items') }}
+with source_order_items as (
+    select * from {{ ref('stg_thelook_ecommerce__order_items') }}
+    union all
+    select * from {{ ref('stg_incremental__order_items') }}
 ),
 
-aggregate_items_to_order_grain AS (
-    SELECT
+aggregate_items_to_order_grain as (
+    select
         order_id,
         user_id,
-        STRING_AGG(DISTINCT order_item_status ORDER BY order_item_status)
-            AS order_item_status_list,
-        COUNT(*) AS subledger_item_count,
-        ROUND(SUM(sale_price), 2) AS total_order_amount,
-        MIN(created_at) AS first_item_created_at,
-        COUNT(CASE WHEN order_item_status = 'returned' THEN 1 END)
-            AS returned_item_count,
-        ROUND(SUM(CASE
-            WHEN order_item_status = 'returned'
-                THEN sale_price
-            ELSE 0
-        END), 2) AS refund_amount,
-        MAX(returned_at) AS last_refund_at
-    FROM source_order_items
-    GROUP BY order_id, user_id
+        string_agg(distinct order_item_status order by order_item_status)
+            as order_item_status_list,
+        count(*) as subledger_item_count,
+        round(sum(sale_price), 2) as total_order_amount,
+        min(created_at) as first_item_created_at,
+        count(case when order_item_status = 'returned' then 1 end)
+            as returned_item_count,
+        round(sum(case
+            when order_item_status = 'returned'
+                then sale_price
+            else 0
+        end), 2) as refund_amount,
+        max(returned_at) as last_refund_at
+    from source_order_items
+    group by 1, 2
 )
 
-SELECT * FROM aggregate_items_to_order_grain
+select * from aggregate_items_to_order_grain

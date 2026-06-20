@@ -1,27 +1,27 @@
-WITH source AS (
-    SELECT * FROM {{ source('thelook_ecommerce', 'raw_users') }}
+with source as (
+    select * from {{ source('thelook_ecommerce', 'raw_users') }}
 ),
 
-renamed AS (
-    SELECT
-        CAST(id AS STRING) AS user_id,
-        LOWER(first_name) AS first_name,
-        LOWER(last_name) AS last_name,
-        LOWER(email) AS email,
-        LOWER(gender) AS gender,
-        LOWER(state) AS state,
-        LOWER(street_address) AS street_address,
+renamed as (
+    select
+        cast(id as string) as user_id,
+        lower(first_name) as first_name,
+        lower(last_name) as last_name,
+        lower(email) as email,
+        lower(gender) as gender,
+        lower(state) as state,
+        lower(street_address) as street_address,
         postal_code,
-        LOWER(city) AS city,
-        LOWER(country) AS country,
-        LOWER(traffic_source) AS traffic_source,
+        lower(city) as city,
+        lower(country) as country,
+        lower(traffic_source) as traffic_source,
         age,
         latitude,
         longitude,
-        CAST(created_at AS TIMESTAMP) AS created_at,
+        cast(created_at as timestamp) as created_at,
         user_geom
-    FROM
+    from
         source
 )
 
-SELECT * FROM renamed
+select * from renamed

@@ -1,73 +1,77 @@
 {{
     config(
-        materialized='incremental',
-        unique_key='order_id',
-        incremental_strategy='merge'
+        materialized = 'incremental',
+        unique_key = 'order_id',
+        incremental_strategy = 'merge'
     )
 }}
 
-WITH base AS (
-    SELECT * FROM {{ ref('int_orders_joined') }}
+with int_orders_joined as (
+    select * from {{ ref('int_orders_joined') }}
 ),
 
-final AS (
-    SELECT
+final as (
+    select
         order_id,
         user_id,
-        created_at AS order_at,
+        created_at as order_at,
         total_order_amount,
 
-        -- Comparison data
+        {# Comparison data #}
+
         master_item_count,
         subledger_item_count,
 
-        -- 1. Existence Reconciliation
-        CASE
-            WHEN master_order_id IS NULL THEN 'ERR: ORPHAN SUB-LEDGER'
-            WHEN subledger_order_id IS NULL THEN 'ERR: MISSING SUB-LEDGER'
-            ELSE 'RECONCILIATION SUCCESSFUL'
-        END AS order_reconciliation,
+        {# 1. Existence Reconciliation #}
 
-        -- 2. Item Count Reconciliation
-        CASE
-            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL
-                THEN
-                    CASE
-                        WHEN
-                            COALESCE(master_item_count, 0)
-                            = COALESCE(subledger_item_count, 0)
-                            THEN 'INTEGRITY VERIFIED'
-                        ELSE 'VARIANCE DETECTED'
-                    END
-            ELSE 'N/A - PREVIOUS ERROR'
-        END AS order_item_count_recon,
+        case
+            when master_order_id is null then 'ERR: ORPHAN SUB-LEDGER'
+            when subledger_order_id is null then 'ERR: MISSING SUB-LEDGER'
+            else 'RECONCILIATION SUCCESSFUL'
+        end as order_reconciliation,
 
-        -- 3. Order Status Reconciliation
-        CASE
-            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL
-                THEN
-                    CASE
-                        WHEN
+        {# 2. Item Count Reconciliation #}
+
+        case
+            when master_order_id is not null and subledger_order_id is not null
+                then
+                    case
+                        when
+                            coalesce(master_item_count, 0)
+                            = coalesce(subledger_item_count, 0)
+                            then 'INTEGRITY VERIFIED'
+                        else 'VARIANCE DETECTED'
+                    end
+            else 'N/A - PREVIOUS ERROR'
+        end as order_item_count_recon,
+
+        {# 3. Order Status Reconciliation #}
+
+        case
+            when master_order_id is not null and subledger_order_id is not null
+                then
+                    case
+                        when
                             master_order_status = subledger_order_status
-                            THEN 'INTEGRITY VERIFIED'
-                        ELSE 'VARIANCE DETECTED'
-                    END
-            ELSE 'N/A - PREVIOUS ERROR'
-        END AS order_status_recon
-    FROM base
+                            then 'INTEGRITY VERIFIED'
+                        else 'VARIANCE DETECTED'
+                    end
+            else 'N/A - PREVIOUS ERROR'
+        end as order_status_recon
+    from int_orders_joined
 )
 
-SELECT * FROM final
+select * from final
 {% if is_incremental() %}
-    WHERE order_id IN (
-        SELECT ij.order_id
-        FROM {{ ref('int_orders_joined') }} AS ij
-        WHERE
-            ij.first_item_created_at
-            >= CURRENT_TIMESTAMP
-            - INTERVAL '{{ var("incremental_lookback_days") }} days'
-            OR ij.last_refund_at
-            >= CURRENT_TIMESTAMP
-            - INTERVAL '{{ var("incremental_lookback_days") }} days'
+    where order_id in (
+        select int_orders_joined.order_id
+        from int_orders_joined
+        where
+            int_orders_joined.first_item_created_at
+            >= current_timestamp
+            - interval '{{ var("incremental_lookback_days") }} days'
+            or int_orders_joined.last_refund_at
+            >= current_timestamp
+            - interval '{{ var("incremental_lookback_days") }} days'
     )
 {% endif %}

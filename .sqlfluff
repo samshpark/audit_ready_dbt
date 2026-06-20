@@ -2,9 +2,15 @@
 dialect = duckdb
 templater = dbt
 runaway_limit = 10
-exclude_rules = ST06, RF04, LT05
+exclude_rules = ST06, RF04, AM06
 
 [sqlfluff:templater:dbt]
 project_dir = .
 profiles_dir = .
 target = dev
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+capitalisation_policy = lower

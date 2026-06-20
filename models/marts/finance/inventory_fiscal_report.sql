@@ -1,260 +1,306 @@
-{{ config(
-    tags=['financial', 'audit_ready']
-) }}
+{{
+    config(
+        tags = ['financial', 'audit_ready']
+    )
+}}
 
-WITH base_ledger AS (
-    SELECT * FROM {{ ref('int_inventory_items_joined') }}
+with int_inventory_items_joined as (
+    select * from {{ ref('int_inventory_items_joined') }}
 ),
 
--- 1. get all available fiscal year
-years AS (
-    SELECT DISTINCT inbound_fiscal_year AS fiscal_year
-    FROM base_ledger
-    WHERE inbound_fiscal_year IS NOT NULL
-    UNION
-    SELECT DISTINCT outbound_fiscal_year
-    FROM base_ledger
-    WHERE outbound_fiscal_year IS NOT NULL
+scd_products as (
+    select * from {{ ref('scd_products') }}
 ),
 
--- 2. By Fiscal Year & Product: Detail Metrics
-product_year_flow AS (
-    SELECT
-        y.fiscal_year,
-        l.product_id,
-        l.product_name,
-        l.product_category,
-        l.product_brand,
+audit_materiality_thresholds as (
+    select * from {{ ref('audit_materiality_thresholds') }}
+),
 
-        -- [P/L] Sold for the fiscal_year
-        COUNT(
-            CASE
-                WHEN
-                    l.outbound_fiscal_year = y.fiscal_year
-                    THEN l.inventory_item_id
-            END
-        ) AS period_units_sold,
-        ROUND(
-            SUM(
-                CASE
-                    WHEN
-                        l.outbound_fiscal_year = y.fiscal_year
-                        THEN l.historical_unit_cost
-                    ELSE 0
-                END
+{# 1. get all available fiscal year #}
+
+years as (
+    select distinct inbound_fiscal_year as fiscal_year
+    from int_inventory_items_joined
+    where inbound_fiscal_year is not null
+    union
+    select distinct outbound_fiscal_year
+    from int_inventory_items_joined
+    where outbound_fiscal_year is not null
+),
+
+{# 2. By Fiscal Year & Product: Detail Metrics #}
+
+product_year_flow as (
+    select
+        years.fiscal_year,
+        inventory.product_id,
+        inventory.product_name,
+        inventory.product_category,
+        inventory.product_brand,
+
+        {# [P/L] Sold for the fiscal_year #}
+
+        count(
+            case
+                when
+                    inventory.outbound_fiscal_year = years.fiscal_year
+                    then inventory.inventory_item_id
+            end
+        ) as period_units_sold,
+        round(
+            sum(
+                case
+                    when
+                        inventory.outbound_fiscal_year = years.fiscal_year
+                        then inventory.historical_unit_cost
+                    else 0
+                end
             ),
             2
-        ) AS period_cogs_amount,
-        ROUND(
-            SUM(
-                CASE
-                    WHEN
-                        l.outbound_fiscal_year = y.fiscal_year
-                        THEN l.sale_price
-                    ELSE 0
-                END
+        ) as period_cogs_amount,
+        round(
+            sum(
+                case
+                    when
+                        inventory.outbound_fiscal_year = years.fiscal_year
+                        then inventory.sale_price
+                    else 0
+                end
             ),
             2
-        ) AS period_revenue,
+        ) as period_revenue,
 
-        -- [B/S] On hand inventory: as of the fiscal year end
-        COUNT(CASE
-            WHEN
-                l.inbound_fiscal_year <= y.fiscal_year
-                AND (
-                    l.outbound_fiscal_year IS NULL
-                    OR l.outbound_fiscal_year > y.fiscal_year
-                )
-                THEN l.inventory_item_id
-        END) AS ending_inv_qty,
+        {# [B/S] On hand inventory: as of the fiscal year end #}
 
-        ROUND(SUM(CASE
-            WHEN
-                l.inbound_fiscal_year <= y.fiscal_year
-                AND (
-                    l.outbound_fiscal_year IS NULL
-                    OR l.outbound_fiscal_year > y.fiscal_year
+        count(case
+            when
+                inventory.inbound_fiscal_year <= years.fiscal_year
+                and (
+                    inventory.outbound_fiscal_year is null
+                    or inventory.outbound_fiscal_year > years.fiscal_year
                 )
-                THEN l.historical_unit_cost
-            ELSE 0
-        END), 2) AS ending_gross_inv_value,
+                then inventory.inventory_item_id
+        end) as ending_inv_qty,
 
-        -- [LCM (Low Cost Market) & NRV (Net realizable value)]: as of the fiscal year end
-        -- Uses period-end market price from scd_products snapshot (fiscal year Dec 31),
-        -- falling back to the inbound-time price from stg_inventory_items if no snapshot record exists.
-        ROUND(SUM(CASE
-            WHEN
-                l.inbound_fiscal_year <= y.fiscal_year
-                AND (
-                    l.outbound_fiscal_year IS NULL
-                    OR l.outbound_fiscal_year > y.fiscal_year
+        round(sum(case
+            when
+                inventory.inbound_fiscal_year <= years.fiscal_year
+                and (
+                    inventory.outbound_fiscal_year is null
+                    or inventory.outbound_fiscal_year > years.fiscal_year
                 )
-                THEN
-                    GREATEST(
+                then inventory.historical_unit_cost
+            else 0
+        end), 2) as ending_gross_inv_value,
+
+        {# [LCM & NRV]: as of the fiscal year end #}
+
+        {# Uses scd_products snapshot price (fiscal year Dec 31); #}
+        {# falls back to stg_inventory_items price if no snapshot exists. #}
+
+        round(sum(case
+            when
+                inventory.inbound_fiscal_year <= years.fiscal_year
+                and (
+                    inventory.outbound_fiscal_year is null
+                    or inventory.outbound_fiscal_year > years.fiscal_year
+                )
+                then
+                    greatest(
                         0,
-                        l.historical_unit_cost
-                        - LEAST(
-                            l.historical_unit_cost,
-                            COALESCE(scd.retail_price, l.current_market_price)
+                        inventory.historical_unit_cost
+                        - least(
+                            inventory.historical_unit_cost,
+                            coalesce(
+                                scd_products.retail_price,
+                                inventory.current_market_price
+                            )
                         )
                     )
-            ELSE 0
-        END), 2) AS ending_allowance_lcm,
+            else 0
+        end), 2) as ending_allowance_lcm,
 
-        ROUND(SUM(CASE
-            WHEN
-                l.inbound_fiscal_year <= y.fiscal_year
-                AND (
-                    l.outbound_fiscal_year IS NULL
-                    OR l.outbound_fiscal_year > y.fiscal_year
+        round(sum(case
+            when
+                inventory.inbound_fiscal_year <= years.fiscal_year
+                and (
+                    inventory.outbound_fiscal_year is null
+                    or inventory.outbound_fiscal_year > years.fiscal_year
                 )
-                THEN
-                    LEAST(
-                        l.historical_unit_cost,
-                        COALESCE(scd.retail_price, l.current_market_price)
+                then
+                    least(
+                        inventory.historical_unit_cost,
+                        coalesce(
+                            scd_products.retail_price,
+                            inventory.current_market_price
+                        )
                     )
-            ELSE 0
-        END), 2) AS ending_net_realizable_value,
+            else 0
+        end), 2) as ending_net_realizable_value,
 
-        -- [Period Purchase Amount]: for the fiscal year
-        ROUND(
-            SUM(
-                CASE
-                    WHEN
-                        l.inbound_fiscal_year = y.fiscal_year
-                        THEN l.historical_unit_cost
-                    ELSE 0
-                END
+        {# [Period Purchase Amount]: for the fiscal year #}
+
+        round(
+            sum(
+                case
+                    when
+                        inventory.inbound_fiscal_year = years.fiscal_year
+                        then inventory.historical_unit_cost
+                    else 0
+                end
             ),
             2
-        ) AS period_purchase_amount,
+        ) as period_purchase_amount,
 
-        -- [Operational: Aging] Average days in inventory as of the fiscal year end: Fiscal Year End date - inbound date
-        ROUND(AVG(CASE
-            WHEN
-                l.inbound_fiscal_year <= y.fiscal_year
-                AND (
-                    l.outbound_fiscal_year IS NULL
-                    OR l.outbound_fiscal_year > y.fiscal_year
+        {# [Operational: Aging] Avg days in inventory at fiscal year end #}
+
+        round(avg(case
+            when
+                inventory.inbound_fiscal_year <= years.fiscal_year
+                and (
+                    inventory.outbound_fiscal_year is null
+                    or inventory.outbound_fiscal_year > years.fiscal_year
                 )
-                THEN
-                    (                                                                                                                                                {{ fiscal_year_end('y.fiscal_year') }} - CAST(l.inbound_at AS DATE)
-                    )
-        END), 1) AS avg_days_on_hand_at_year_end
-
-    FROM years AS y
-    CROSS JOIN base_ledger AS l
-    LEFT JOIN {{ ref('scd_products') }} AS scd
-        ON
-            l.product_id = scd.product_id
-            AND {{ fiscal_year_end('y.fiscal_year') }} >= scd.dbt_valid_from
-            AND (
-                scd.dbt_valid_to IS NULL
-                OR {{ fiscal_year_end('y.fiscal_year') }} < scd.dbt_valid_to
-            )
-    GROUP BY y.fiscal_year, l.product_id, l.product_name, l.product_category, l.product_brand
-),
-
-final_report AS (
-    SELECT
-        *,
-        -- Beginning Inventory = Ending Inventory of Last Fiscal Year
-        LAG(ending_gross_inv_value, 1, 0)
-            OVER (PARTITION BY product_id ORDER BY fiscal_year)
-            AS beginning_inv_value
-    FROM product_year_flow
-),
-
-final AS (
-
-    SELECT
-        fr.fiscal_year,
-        fr.product_id,
-        fr.product_name,
-        fr.product_category,
-        fr.product_brand,
-        fr.period_units_sold,
-        fr.period_cogs_amount,
-        fr.period_revenue,
-        fr.beginning_inv_value,
-        fr.period_purchase_amount,
-        fr.ending_gross_inv_value,
-        fr.ending_inv_qty,
-        fr.ending_allowance_lcm,
-        fr.ending_net_realizable_value,
-        fr.avg_days_on_hand_at_year_end,
-
-        -- 1. Inventory Reconciliation & Audit Check
-        -- Formula: (Beginning + Purchase - Ending) - COGS
-        -- This should ideally be 0. Discrepancies indicate:
-        --   (+) Positive: Inventory Shrinkage (Unrecorded loss, theft, or breakage)
-        --   (-) Negative: Surplus/Ghost Inventory (Unrecorded receipts or COGS overstatement)
-
-        mat.risk_tier,
-
-        -- 2. Financial Ratios
-        mat.materiality_threshold,
-        CASE
-            WHEN
-                ABS(
+                then
                     (
-                        fr.beginning_inv_value
-                        + fr.period_purchase_amount
-                        - fr.ending_gross_inv_value
+                        {{ fiscal_year_end('years.fiscal_year') }}
+                        - cast(inventory.inbound_at as date)
                     )
-                    - fr.period_cogs_amount
+        end), 1) as avg_days_on_hand_at_year_end
+
+    from years
+    cross join int_inventory_items_joined as inventory
+    left join scd_products
+        on
+            inventory.product_id = scd_products.product_id
+            and {{ fiscal_year_end('years.fiscal_year') }}
+            >= scd_products.dbt_valid_from
+            and (
+                scd_products.dbt_valid_to is null
+                or {{ fiscal_year_end('years.fiscal_year') }}
+                < scd_products.dbt_valid_to
+            )
+    group by 1, 2, 3, 4, 5
+),
+
+add_beginning_inventory_value as (
+    select
+        *,
+        {# Beginning Inventory = Ending Inventory of Last Fiscal Year #}
+
+        lag(ending_gross_inv_value, 1, 0)
+            over (partition by product_id order by fiscal_year)
+            as beginning_inv_value
+    from product_year_flow
+),
+
+final as (
+    select
+        add_beginning_inventory_value.fiscal_year,
+        add_beginning_inventory_value.product_id,
+        add_beginning_inventory_value.product_name,
+        add_beginning_inventory_value.product_category,
+        add_beginning_inventory_value.product_brand,
+        add_beginning_inventory_value.period_units_sold,
+        add_beginning_inventory_value.period_cogs_amount,
+        add_beginning_inventory_value.period_revenue,
+        add_beginning_inventory_value.beginning_inv_value,
+        add_beginning_inventory_value.period_purchase_amount,
+        add_beginning_inventory_value.ending_gross_inv_value,
+        add_beginning_inventory_value.ending_inv_qty,
+        add_beginning_inventory_value.ending_allowance_lcm,
+        add_beginning_inventory_value.ending_net_realizable_value,
+        add_beginning_inventory_value.avg_days_on_hand_at_year_end,
+
+        {# 1. Inventory Reconciliation & Audit Check #}
+
+        {# Formula: (Beginning + Purchase - Ending) - COGS #}
+
+        {# This should ideally be 0. Discrepancies indicate: #}
+
+        {#   (+) Positive: Inventory Shrinkage (theft, breakage) #}
+        {#   (-) Negative: Ghost Inventory (unrecorded receipts) #}
+
+        audit_materiality_thresholds.risk_tier,
+
+        {# 2. Financial Ratios #}
+
+        audit_materiality_thresholds.materiality_threshold,
+        case
+            when
+                abs(
+                    (
+                        add_beginning_inventory_value.beginning_inv_value
+                        + add_beginning_inventory_value.period_purchase_amount
+                        - add_beginning_inventory_value.ending_gross_inv_value
+                    )
+                    - add_beginning_inventory_value.period_cogs_amount
                 )
                 <= 0.019
-                -- Tolerance of $0.019 accounts for floating-point rounding error accumulated from
-                -- ROUND(..., 2) applied to individual item-level costs across multiple aggregations.
-                -- Any variance exceeding this threshold is a real discrepancy and flagged for investigation.
-                THEN 0
-            ELSE
-                ROUND(
+                {# $0.019 tolerance: floating-point rounding error from #}
+                {# round(..., 2) accumulated across item-level aggregations. #}
+                {# Variance above this threshold flags real discrepancies. #}
+                then 0
+            else
+                round(
                     (
-                        fr.beginning_inv_value
-                        + fr.period_purchase_amount
-                        - fr.ending_gross_inv_value
+                        add_beginning_inventory_value.beginning_inv_value
+                        + add_beginning_inventory_value.period_purchase_amount
+                        - add_beginning_inventory_value.ending_gross_inv_value
                     )
-                    - fr.period_cogs_amount,
+                    - add_beginning_inventory_value.period_cogs_amount,
                     2
                 )
-        END AS audit_check_diff,
+        end as audit_check_diff,
 
-        -- 3. Risk Assessment
-        ROUND(
-            fr.period_cogs_amount
-            / NULLIF(
-                (fr.beginning_inv_value + fr.ending_gross_inv_value) / 2, 0
+        {# 3. Risk Assessment #}
+
+        round(
+            add_beginning_inventory_value.period_cogs_amount
+            / nullif(
+                (
+                    add_beginning_inventory_value.beginning_inv_value
+                    + add_beginning_inventory_value.ending_gross_inv_value
+                ) / 2, 0
             ),
             3
-        ) AS inventory_turnover_ratio,
+        ) as inventory_turnover_ratio,
 
-        -- 4. Audit Metadata (from audit_materiality_thresholds seed)
-        ROUND(
-            (fr.period_revenue - fr.period_cogs_amount)
-            / NULLIF(fr.period_revenue, 0),
+        {# 4. Audit Metadata (from audit_materiality_thresholds seed) #}
+
+        round(
+            (
+                add_beginning_inventory_value.period_revenue
+                - add_beginning_inventory_value.period_cogs_amount
+            )
+            / nullif(add_beginning_inventory_value.period_revenue, 0),
             4
-        ) AS gross_profit_margin,
-        CASE
-            WHEN
-                fr.avg_days_on_hand_at_year_end > 365 * 4
-                THEN 'Critical: Obsolete'
-            WHEN
-                fr.avg_days_on_hand_at_year_end > 365 * 2
-                THEN 'Warning: Slow Moving'
-            WHEN
-                fr.ending_net_realizable_value
-                < (fr.ending_gross_inv_value - 0.01)
-                THEN 'Adjustment Required: NRV < Cost'
-            ELSE 'Healthy'
-        END AS inventory_risk_rating
+        ) as gross_profit_margin,
+        case
+            when
+                add_beginning_inventory_value.avg_days_on_hand_at_year_end
+                > 365 * 4
+                then 'Critical: Obsolete'
+            when
+                add_beginning_inventory_value.avg_days_on_hand_at_year_end
+                > 365 * 2
+                then 'Warning: Slow Moving'
+            when
+                add_beginning_inventory_value.ending_net_realizable_value
+                < (add_beginning_inventory_value.ending_gross_inv_value - 0.01)
+                then 'Adjustment Required: NRV < Cost'
+            else 'Healthy'
+        end as inventory_risk_rating
 
-    FROM final_report AS fr
-    LEFT JOIN {{ ref('audit_materiality_thresholds') }} AS mat
-        ON fr.product_category = mat.product_category
+    from add_beginning_inventory_value
+    left join audit_materiality_thresholds
+        on
+            add_beginning_inventory_value.product_category
+            = audit_materiality_thresholds.product_category
+    where
+        add_beginning_inventory_value.period_purchase_amount > 0
+        or add_beginning_inventory_value.period_cogs_amount > 0
+        or add_beginning_inventory_value.ending_inv_qty > 0
 )
 
-SELECT * FROM final
-WHERE period_purchase_amount > 0 OR period_cogs_amount > 0 OR ending_inv_qty > 0
-ORDER BY product_id, fiscal_year
+select * from final

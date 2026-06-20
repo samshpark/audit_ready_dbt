@@ -1,20 +1,20 @@
-WITH source AS (
-    SELECT * FROM {{ source('thelook_ecommerce', 'raw_orders') }}
+with source as (
+    select * from {{ source('thelook_ecommerce', 'raw_orders') }}
 ),
 
-renamed AS (
-    SELECT
-        CAST(order_id AS STRING) AS order_id,
-        CAST(user_id AS STRING) AS user_id,
-        LOWER(status) AS order_status,
-        LOWER(gender) AS user_gender,
-        num_of_item AS number_of_items,
-        CAST(created_at AS TIMESTAMP) AS created_at,
-        CAST(returned_at AS TIMESTAMP) AS returned_at,
-        CAST(shipped_at AS TIMESTAMP) AS shipped_at,
-        CAST(delivered_at AS TIMESTAMP) AS delivered_at
-    FROM
+renamed as (
+    select
+        cast(order_id as string) as order_id,
+        cast(user_id as string) as user_id,
+        lower(status) as order_status,
+        lower(gender) as user_gender,
+        num_of_item as number_of_items,
+        cast(created_at as timestamp) as created_at,
+        cast(returned_at as timestamp) as returned_at,
+        cast(shipped_at as timestamp) as shipped_at,
+        cast(delivered_at as timestamp) as delivered_at
+    from
         source
 )
 
-SELECT * FROM renamed
+select * from renamed

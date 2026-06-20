@@ -1,78 +1,80 @@
-WITH inbound AS (
-    SELECT
+with inbound as (
+    select
         inventory_item_id,
         product_id,
         product_category,
         product_name,
         product_brand,
-        created_at AS inbound_at,
+        created_at as inbound_at,
         cost,
         product_retail_price,
         product_department
-    FROM {{ ref('stg_thelook_ecommerce__inventory_items') }}
-    UNION ALL
-    SELECT
+    from {{ ref('stg_thelook_ecommerce__inventory_items') }}
+    union all
+    select
         inventory_item_id,
         product_id,
         product_category,
         product_name,
         product_brand,
-        created_at AS inbound_at,
+        created_at as inbound_at,
         cost,
         product_retail_price,
         product_department
-    FROM {{ ref('stg_incremental__inventory_items') }}
+    from {{ ref('stg_incremental__inventory_items') }}
 ),
 
-outbound AS (
-    SELECT
+outbound as (
+    select
         inventory_item_id,
         product_id,
-        shipped_at AS outbound_at,
+        shipped_at as outbound_at,
         sale_price
-    FROM {{ ref('stg_thelook_ecommerce__order_items') }}
-    WHERE order_item_status NOT IN ('cancelled', 'returned', 'processing')
-    UNION ALL
-    SELECT
+    from {{ ref('stg_thelook_ecommerce__order_items') }}
+    where order_item_status not in ('cancelled', 'returned', 'processing')
+    union all
+    select
         inventory_item_id,
         product_id,
-        shipped_at AS outbound_at,
+        shipped_at as outbound_at,
         sale_price
-    FROM {{ ref('stg_incremental__order_items') }}
-    WHERE order_item_status NOT IN ('cancelled', 'returned', 'processing')
+    from {{ ref('stg_incremental__order_items') }}
+    where order_item_status not in ('cancelled', 'returned', 'processing')
 ),
 
-join_inbound_to_outbound AS (
-    SELECT
-        inb.product_id AS inbound_product_id,
-        outb.product_id AS outbound_product_id,
-        inb.product_category,
-        inb.product_name,
-        inb.product_brand,
-        outb.outbound_at,
-        inb.cost AS historical_unit_cost,
+join_inbound_to_outbound as (
+    select
+        inbound.product_id as inbound_product_id,
+        outbound.product_id as outbound_product_id,
+        inbound.product_category,
+        inbound.product_name,
+        inbound.product_brand,
+        outbound.outbound_at,
+        inbound.cost as historical_unit_cost,
 
-        -- Guard against records where outbound precedes inbound (physically impossible; breaks days_in_inventory and P&L audit checks)
-        inb.product_retail_price AS current_market_price,
+        {# Guard against outbound-before-inbound records #}
+        {# (breaks days_in_inventory and P&L audit checks) #}
 
-        outb.sale_price,
-        COALESCE(inb.inventory_item_id, outb.inventory_item_id)
-            AS inventory_item_id,
-        COALESCE(inb.product_id, outb.product_id) AS product_id,
-        CASE
-            WHEN
-                outb.outbound_at IS NOT NULL
-                AND inb.inbound_at > outb.outbound_at
-                THEN outb.outbound_at
-            ELSE inb.inbound_at
-        END AS inbound_at
-    FROM inbound AS inb
-    FULL JOIN outbound AS outb
-        ON inb.inventory_item_id = outb.inventory_item_id
+        inbound.product_retail_price as current_market_price,
+
+        outbound.sale_price,
+        coalesce(inbound.inventory_item_id, outbound.inventory_item_id)
+            as inventory_item_id,
+        coalesce(inbound.product_id, outbound.product_id) as product_id,
+        case
+            when
+                outbound.outbound_at is not null
+                and inbound.inbound_at > outbound.outbound_at
+                then outbound.outbound_at
+            else inbound.inbound_at
+        end as inbound_at
+    from inbound
+    full join outbound
+        on inbound.inventory_item_id = outbound.inventory_item_id
 ),
 
-calculate_inventory_metrics AS (
-    SELECT
+calculate_inventory_metrics as (
+    select
         inventory_item_id,
         product_id,
         product_category,
@@ -83,73 +85,79 @@ calculate_inventory_metrics AS (
         historical_unit_cost,
         current_market_price,
         sale_price,
-        -- Evaluate LCM (Lower of Cost or Market)
-        LEAST(historical_unit_cost, current_market_price) AS lcm_unit_valuation,
-        -- "Allowance for Inventory Valuation" in Financial Statements
+        {# Evaluate LCM (Lower of Cost or Market) #}
+
+        least(historical_unit_cost, current_market_price) as lcm_unit_valuation,
+        {# "Allowance for Inventory Valuation" in Financial Statements #}
+
         historical_unit_cost
-        - LEAST(historical_unit_cost, current_market_price)
-            AS inventory_valuation_loss,
+        - least(historical_unit_cost, current_market_price)
+            as inventory_valuation_loss,
 
-        CASE
-            WHEN inbound_at IS NULL THEN NULL
-            WHEN outbound_at IS NOT NULL
-                THEN {{ datediff_days('inbound_at', 'outbound_at') }}
-            -- 0 if future inbound
-            ELSE GREATEST({{ datediff_days('inbound_at', 'CURRENT_DATE') }}, 0)
-        END AS days_in_inventory,
+        case
+            when inbound_at is null then null
+            when outbound_at is not null
+                then {{ datediff_days('inbound_at', 'outbound_at') }}
+            {# 0 if future inbound #}
 
-        CASE
-            -- 1. Ending Inventory
-            WHEN outbound_at IS NULL
-                THEN
-                    CASE
-                        WHEN
+            else greatest({{ datediff_days('inbound_at', 'CURRENT_DATE') }}, 0)
+        end as days_in_inventory,
+
+        case
+            {# 1. Ending Inventory #}
+
+            when outbound_at is null
+                then
+                    case
+                        when
                             days_in_inventory > 365 * 4
-                            THEN 'On-hand: 04. Obsolete (>4yr)'
-                        WHEN
+                            then 'On-hand: 04. Obsolete (>4yr)'
+                        when
                             days_in_inventory > 365 * 3
-                            THEN 'On-hand: 03. Slow-moving (3yr-4yr)'
-                        WHEN
+                            then 'On-hand: 03. Slow-moving (3yr-4yr)'
+                        when
                             days_in_inventory > 365 * 2
-                            THEN 'On-hand: 02. Stagnant (2yr-3yr)'
-                        ELSE 'On-hand: 01. Healthy (<2y)'
-                    END
+                            then 'On-hand: 02. Stagnant (2yr-3yr)'
+                        else 'On-hand: 01. Healthy (<2y)'
+                    end
 
-            -- 2. COGs
-            WHEN
+            {# 2. COGs #}
+
+            when
                 days_in_inventory > 365 * 4
-                THEN 'Sold: 04. Very Slow (>4yr)'
-            WHEN
+                then 'Sold: 04. Very Slow (>4yr)'
+            when
                 days_in_inventory > 365 * 3
-                THEN 'Sold: 03. Slow (3yr-4yr)'
-            WHEN
+                then 'Sold: 03. Slow (3yr-4yr)'
+            when
                 days_in_inventory > 365 * 2
-                THEN 'Sold: 02. Normal (2yr-3yr)'
-            ELSE 'Sold: 01. Fast (<2y)'
-        END AS aging_velocity_bucket,
+                then 'Sold: 02. Normal (2yr-3yr)'
+            else 'Sold: 01. Fast (<2y)'
+        end as aging_velocity_bucket,
 
-        CASE
-            WHEN
-                inventory_item_id IS NULL
-                THEN 'Error: Outbound without Inbound'
-            WHEN outbound_at IS NULL THEN 'On-hand (Ending Inventory)'
-            ELSE 'Sold (COGS)'
-        END AS stock_status,
+        case
+            when
+                inventory_item_id is null
+                then 'Error: Outbound without Inbound'
+            when outbound_at is null then 'On-hand (Ending Inventory)'
+            else 'Sold (COGS)'
+        end as stock_status,
 
-        -- Evaluate whether the product_id is a match
-        CASE
-            WHEN
-                inbound_product_id IS NOT NULL
-                AND outbound_product_id IS NOT NULL
-                AND inbound_product_id <> outbound_product_id
-                THEN 'Product Not Match'
-            ELSE 'Product Match'
-        END AS product_match,
-        EXTRACT(YEAR FROM CAST(outbound_at AS TIMESTAMP))
-            AS outbound_fiscal_year,
-        EXTRACT(YEAR FROM CAST(inbound_at AS TIMESTAMP)) AS inbound_fiscal_year
+        {# Evaluate whether the product_id is a match #}
 
-    FROM join_inbound_to_outbound
+        case
+            when
+                inbound_product_id is not null
+                and outbound_product_id is not null
+                and inbound_product_id <> outbound_product_id
+                then 'Product Not Match'
+            else 'Product Match'
+        end as product_match,
+        extract(year from cast(outbound_at as timestamp))
+            as outbound_fiscal_year,
+        extract(year from cast(inbound_at as timestamp)) as inbound_fiscal_year
+
+    from join_inbound_to_outbound
 )
 
-SELECT * FROM calculate_inventory_metrics
+select * from calculate_inventory_metrics
