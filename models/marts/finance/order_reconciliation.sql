@@ -30,21 +30,28 @@ final AS (
 
         -- 2. Item Count Reconciliation
         CASE
-            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL THEN
-                CASE
-                    WHEN COALESCE(master_item_count, 0) = COALESCE(subledger_item_count, 0) THEN 'INTEGRITY VERIFIED'
-                    ELSE 'VARIANCE DETECTED'
-                END
+            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL
+                THEN
+                    CASE
+                        WHEN
+                            COALESCE(master_item_count, 0)
+                            = COALESCE(subledger_item_count, 0)
+                            THEN 'INTEGRITY VERIFIED'
+                        ELSE 'VARIANCE DETECTED'
+                    END
             ELSE 'N/A - PREVIOUS ERROR'
         END AS order_item_count_recon,
 
         -- 3. Order Status Reconciliation
         CASE
-            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL THEN
-                CASE
-                    WHEN master_order_status = subledger_order_status THEN 'INTEGRITY VERIFIED'
-                    ELSE 'VARIANCE DETECTED'
-                END
+            WHEN master_order_id IS NOT NULL AND subledger_order_id IS NOT NULL
+                THEN
+                    CASE
+                        WHEN
+                            master_order_status = subledger_order_status
+                            THEN 'INTEGRITY VERIFIED'
+                        ELSE 'VARIANCE DETECTED'
+                    END
             ELSE 'N/A - PREVIOUS ERROR'
         END AS order_status_recon
     FROM base
@@ -52,9 +59,15 @@ final AS (
 
 SELECT * FROM final
 {% if is_incremental() %}
-WHERE order_id IN (
-    SELECT order_id FROM {{ ref('int_orders_joined') }}
-    WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
-       OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
-)
+    WHERE order_id IN (
+        SELECT ij.order_id
+        FROM {{ ref('int_orders_joined') }} AS ij
+        WHERE
+            ij.first_item_created_at
+            >= CURRENT_TIMESTAMP
+            - INTERVAL '{{ var("incremental_lookback_days") }} days'
+            OR ij.last_refund_at
+            >= CURRENT_TIMESTAMP
+            - INTERVAL '{{ var("incremental_lookback_days") }} days'
+    )
 {% endif %}

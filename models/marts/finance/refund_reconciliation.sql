@@ -17,18 +17,31 @@ WITH reconciled AS (
         returned_item_count AS total_returned_items
     FROM {{ ref('int_order_items_aggregated') }}
     {% if is_incremental() %}
-    WHERE first_item_created_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
-       OR last_refund_at >= CURRENT_TIMESTAMP - INTERVAL '{{ var("incremental_lookback_days") }} days'
+        WHERE
+            first_item_created_at
+            >= CURRENT_TIMESTAMP
+            - INTERVAL '{{ var("incremental_lookback_days") }} days'
+            OR last_refund_at
+            >= CURRENT_TIMESTAMP
+            - INTERVAL '{{ var("incremental_lookback_days") }} days'
     {% endif %}
 ),
 
 final AS (
-    SELECT 
+    SELECT
         *,
         (gross_revenue - refund_amount) AS net_revenue,
-        ROUND(COALESCE(refund_amount / NULLIF(gross_revenue, 0), 0), 4) AS refund_value_rate,
-        ROUND(COALESCE(CAST(total_returned_items AS FLOAT) / NULLIF(total_item_count, 0), 0), 4) AS refund_count_rate,
-        CASE 
+        ROUND(COALESCE(refund_amount / NULLIF(gross_revenue, 0), 0), 4)
+            AS refund_value_rate,
+        ROUND(
+            COALESCE(
+                CAST(total_returned_items AS FLOAT)
+                / NULLIF(total_item_count, 0),
+                0
+            ),
+            4
+        ) AS refund_count_rate,
+        CASE
             WHEN total_returned_items = 0 THEN 'NO REFUND'
             WHEN total_returned_items = total_item_count THEN 'FULLY REFUNDED'
             ELSE 'PARTIALLY REFUNDED'

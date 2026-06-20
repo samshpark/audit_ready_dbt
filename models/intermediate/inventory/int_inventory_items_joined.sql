@@ -44,27 +44,30 @@ outbound AS (
 
 join_inbound_to_outbound AS (
     SELECT
-        COALESCE(inb.inventory_item_id, outb.inventory_item_id) AS inventory_item_id,
-        COALESCE(inb.product_id, outb.product_id) AS product_id,
         inb.product_id AS inbound_product_id,
         outb.product_id AS outbound_product_id,
         inb.product_category,
         inb.product_name,
         inb.product_brand,
-
-        -- Guard against records where outbound precedes inbound (physically impossible; breaks days_in_inventory and P&L audit checks)
-        CASE
-            WHEN outb.outbound_at IS NOT NULL AND inb.inbound_at > outb.outbound_at
-            THEN outb.outbound_at
-            ELSE inb.inbound_at
-        END AS inbound_at,
-
         outb.outbound_at,
         inb.cost AS historical_unit_cost,
+
+        -- Guard against records where outbound precedes inbound (physically impossible; breaks days_in_inventory and P&L audit checks)
         inb.product_retail_price AS current_market_price,
-        outb.sale_price
-    FROM inbound inb
-    FULL JOIN outbound outb
+
+        outb.sale_price,
+        COALESCE(inb.inventory_item_id, outb.inventory_item_id)
+            AS inventory_item_id,
+        COALESCE(inb.product_id, outb.product_id) AS product_id,
+        CASE
+            WHEN
+                outb.outbound_at IS NOT NULL
+                AND inb.inbound_at > outb.outbound_at
+                THEN outb.outbound_at
+            ELSE inb.inbound_at
+        END AS inbound_at
+    FROM inbound AS inb
+    FULL JOIN outbound AS outb
         ON inb.inventory_item_id = outb.inventory_item_id
 ),
 
@@ -74,58 +77,76 @@ calculate_inventory_metrics AS (
         product_id,
         product_category,
         product_name,
-        product_brand, 
-        inbound_at,        
+        product_brand,
+        inbound_at,
         outbound_at,
         historical_unit_cost,
         current_market_price,
         sale_price,
-        LEAST(historical_unit_cost, current_market_price) AS lcm_unit_valuation, -- Evaluate LCM (Lower of Cost or Market)
+        -- Evaluate LCM (Lower of Cost or Market)
+        LEAST(historical_unit_cost, current_market_price) AS lcm_unit_valuation,
         -- "Allowance for Inventory Valuation" in Financial Statements
-        historical_unit_cost - LEAST(historical_unit_cost, current_market_price) AS inventory_valuation_loss,
-        
-        CASE 
-            WHEN inbound_at IS NULL THEN NULL 
-            WHEN outbound_at IS NOT NULL 
-            THEN {{ datediff_days('inbound_at', 'outbound_at') }}
+        historical_unit_cost
+        - LEAST(historical_unit_cost, current_market_price)
+            AS inventory_valuation_loss,
+
+        CASE
+            WHEN inbound_at IS NULL THEN NULL
+            WHEN outbound_at IS NOT NULL
+                THEN {{ datediff_days('inbound_at', 'outbound_at') }}
             -- 0 if future inbound
             ELSE GREATEST({{ datediff_days('inbound_at', 'CURRENT_DATE') }}, 0)
         END AS days_in_inventory,
 
-        CASE 
+        CASE
             -- 1. Ending Inventory
-            WHEN outbound_at IS NULL THEN 
-                CASE 
-                    WHEN days_in_inventory > 365*4 THEN 'On-hand: 04. Obsolete (>4yr)'
-                    WHEN days_in_inventory > 365*3 THEN 'On-hand: 03. Slow-moving (3yr-4yr)'
-                    WHEN days_in_inventory > 365*2  THEN 'On-hand: 02. Stagnant (2yr-3yr)'
-                    ELSE 'On-hand: 01. Healthy (<2y)' 
-                END
-    
+            WHEN outbound_at IS NULL
+                THEN
+                    CASE
+                        WHEN
+                            days_in_inventory > 365 * 4
+                            THEN 'On-hand: 04. Obsolete (>4yr)'
+                        WHEN
+                            days_in_inventory > 365 * 3
+                            THEN 'On-hand: 03. Slow-moving (3yr-4yr)'
+                        WHEN
+                            days_in_inventory > 365 * 2
+                            THEN 'On-hand: 02. Stagnant (2yr-3yr)'
+                        ELSE 'On-hand: 01. Healthy (<2y)'
+                    END
+
             -- 2. COGs
-            ELSE 
-                CASE 
-                    WHEN days_in_inventory > 365*4 THEN 'Sold: 04. Very Slow (>4yr)'
-                    WHEN days_in_inventory > 365*3 THEN 'Sold: 03. Slow (3yr-4yr)'
-                    WHEN days_in_inventory > 365*2  THEN 'Sold: 02. Normal (2yr-3yr)'
-                    ELSE 'Sold: 01. Fast (<2y)'
-                END
+            WHEN
+                days_in_inventory > 365 * 4
+                THEN 'Sold: 04. Very Slow (>4yr)'
+            WHEN
+                days_in_inventory > 365 * 3
+                THEN 'Sold: 03. Slow (3yr-4yr)'
+            WHEN
+                days_in_inventory > 365 * 2
+                THEN 'Sold: 02. Normal (2yr-3yr)'
+            ELSE 'Sold: 01. Fast (<2y)'
         END AS aging_velocity_bucket,
 
-        CASE WHEN inventory_item_id IS NULL THEN 'Error: Outbound without Inbound'
+        CASE
+            WHEN
+                inventory_item_id IS NULL
+                THEN 'Error: Outbound without Inbound'
             WHEN outbound_at IS NULL THEN 'On-hand (Ending Inventory)'
             ELSE 'Sold (COGS)'
         END AS stock_status,
 
         -- Evaluate whether the product_id is a match
         CASE
-            WHEN inbound_product_id IS NOT NULL
+            WHEN
+                inbound_product_id IS NOT NULL
                 AND outbound_product_id IS NOT NULL
                 AND inbound_product_id <> outbound_product_id
-            THEN 'Product Not Match'
+                THEN 'Product Not Match'
             ELSE 'Product Match'
         END AS product_match,
-        EXTRACT(YEAR FROM CAST(outbound_at AS TIMESTAMP)) AS outbound_fiscal_year,
+        EXTRACT(YEAR FROM CAST(outbound_at AS TIMESTAMP))
+            AS outbound_fiscal_year,
         EXTRACT(YEAR FROM CAST(inbound_at AS TIMESTAMP)) AS inbound_fiscal_year
 
     FROM join_inbound_to_outbound
