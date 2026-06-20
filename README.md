@@ -20,9 +20,9 @@ I adopted a hybrid architecture to balance development efficiency with productio
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** files via API.
 * **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends ~100 synthetic orders daily — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable.
-* **Local Data Lake** (not tracked in git — regenerate via `scripts/ingest_data.py`):
-    - `data/raw_orders.parquet`, `raw_order_items.parquet`, `raw_products.parquet`, `raw_users.parquet`, `raw_inventory_items.parquet` — BigQuery-sourced, read-only
-    - `data/incr_orders.parquet`, `incr_order_items.parquet`, `incr_inventory_items.parquet` — Airflow-generated daily data
+* **Local Data Lake**:
+    - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
+    - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py`, then updated automatically by the Airflow pipeline.
 * **Seeds** (`seeds/`):
     - 📂 `seeds/audit_materiality_thresholds.csv` — CPA-defined audit risk tier and materiality threshold per product category (lookup table)
 
@@ -280,7 +280,7 @@ The following features are planned for future development:
 
 **Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
-> **Note for reviewers**: All `data/*.parquet` files (~4.5 MB total) are included in this repository for convenience. **Steps 4–6 (BigQuery ingestion and incremental data initialization) can be skipped** — the pipeline runs immediately with the pre-built data files.
+> **Note for reviewers**: `data/raw_*.parquet` (~4 MB, BigQuery source data) is included in this repository. **Steps 4–5 (BigQuery ingestion) can be skipped**. Step 6 (incremental parquet initialization) is still required — `incr_*.parquet` files are excluded from git as they change daily.
 
 ### Step 1 — Clone the repository
 ```bash
@@ -310,17 +310,16 @@ pip install dbt-duckdb dbt-metricflow google-cloud-bigquery pandas pyarrow
 - Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts) with **BigQuery Data Viewer** and **BigQuery Job User** roles
 - Download the JSON key and save it to `credentials/google_creds.json` (excluded from git)
 
-### Step 5 — Ingest data from BigQuery
+### Step 5 — Ingest data from BigQuery *(optional — raw_*.parquet already in repo)*
 ```bash
-# Pulls ~100K orders from the public thelook_ecommerce dataset
-# and saves raw_*.parquet to data/ (not tracked in git)
+# Only needed if you want to re-pull fresh data from BigQuery
 python scripts/ingest_data.py
 ```
 
-### Step 6 — Initialize incremental parquet files
+### Step 6 — Initialize incremental parquet files *(required)*
 ```bash
-# Creates the initial incr_*.parquet files that Airflow appends to daily
-# Run from the project root
+# incr_*.parquet are excluded from git (updated daily by Airflow)
+# Run once to create them before the first dbt build
 python scripts/generate_daily_incremental.py
 ```
 

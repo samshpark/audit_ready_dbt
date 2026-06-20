@@ -11,7 +11,9 @@ credentials/
 profiles.yml
 dev.duckdb
 
-# Raw data files are tracked in git for reviewer convenience (total ~4.5MB)
+# BigQuery-sourced data is tracked in git for reviewer convenience (~4MB, static)
+# Incremental files are excluded — generated daily by Airflow / generate_daily_incremental.py
+data/incr_*.parquet
 
 .DS_Store
 venv/
