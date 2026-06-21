@@ -26,3 +26,6 @@ models/marts/test.sql
 dbt_internal_packages/
 
 notebook/practice.ipynb
+
+# One-time utility, not part of the active pipeline
+scripts/create_sample_order_items.py
