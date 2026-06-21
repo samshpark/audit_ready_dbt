@@ -30,14 +30,14 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
     inv_path = os.path.join(data_dir, "incr_inventory_items.parquet")
     products_path = os.path.join(data_dir, "raw_products.parquet")
 
-    existing_items = pd.read_parquet(items_path)
-    existing_orders = pd.read_parquet(orders_path)
-    existing_inv = pd.read_parquet(inv_path)
+    existing_items = pd.read_parquet(items_path) if os.path.exists(items_path) else pd.DataFrame()
+    existing_orders = pd.read_parquet(orders_path) if os.path.exists(orders_path) else pd.DataFrame()
+    existing_inv = pd.read_parquet(inv_path) if os.path.exists(inv_path) else pd.DataFrame()
     user_df = pd.read_parquet(users_path)
     product_df = pd.read_parquet(products_path)
 
     real_user_ids = user_df["id"].unique().tolist()
-    real_product_ids = existing_items["product_id"].drop_duplicates().tolist()
+    real_product_ids = product_df["id"].unique().tolist()
     user_gender_map = user_df.set_index("id")["gender"].to_dict()
 
     # Product lookup: product_id → attributes needed for raw_inventory_items
@@ -55,22 +55,27 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
     ].to_dict("index")
 
     # Continue negative-ID sequences so synthetic rows never collide with real data
-    neg_mask = existing_items["id"] < 0
-    next_item_id = (
-        int(existing_items.loc[neg_mask, "id"].min()) - 1 if neg_mask.any() else -1
-    )
+    if not existing_items.empty and "id" in existing_items.columns:
+        neg_mask = existing_items["id"] < 0
+        next_item_id = int(existing_items.loc[neg_mask, "id"].min()) - 1 if neg_mask.any() else -1
+    else:
+        next_item_id = -1
 
-    neg_mask = existing_orders["order_id"] < 0
-    next_order_id = (
-        int(existing_orders.loc[neg_mask, "order_id"].min()) - 1
-        if neg_mask.any()
-        else -1
-    )
+    if not existing_orders.empty and "order_id" in existing_orders.columns:
+        neg_mask = existing_orders["order_id"] < 0
+        next_order_id = (
+            int(existing_orders.loc[neg_mask, "order_id"].min()) - 1 if neg_mask.any() else -1
+        )
+    else:
+        next_order_id = -1
 
-    neg_mask = existing_inv["id"] < 0
-    next_inv_item_id = (
-        int(existing_inv.loc[neg_mask, "id"].min()) - 1 if neg_mask.any() else -1
-    )
+    if not existing_inv.empty and "id" in existing_inv.columns:
+        neg_mask = existing_inv["id"] < 0
+        next_inv_item_id = (
+            int(existing_inv.loc[neg_mask, "id"].min()) - 1 if neg_mask.any() else -1
+        )
+    else:
+        next_inv_item_id = -1
 
     today = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0

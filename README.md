@@ -286,7 +286,7 @@ The following features are planned for future development:
 
 **Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
-> **Note for reviewers**: `data/raw_*.parquet` (~4 MB, BigQuery source data) is included in this repository. **Steps 4–5 (BigQuery ingestion) can be skipped**. Step 6 (incremental parquet initialization) is still required — `incr_*.parquet` files are excluded from git as they change daily.
+> **Note for reviewers**: `data/raw_*.parquet` (~4 MB, BigQuery source data) is included in this repository. **Steps 4–5 (BigQuery ingestion) can be skipped**. From Step 7, choose either manual execution or Airflow — `incr_*.parquet` files are excluded from git as they change daily.
 
 ### Step 1 — Clone the repository
 ```bash
@@ -322,23 +322,30 @@ pip install dbt-duckdb dbt-metricflow google-cloud-bigquery pandas pyarrow
 python scripts/ingest_data.py
 ```
 
-### Step 6 — Initialize incremental parquet files *(required)*
+### Step 6 — Install dbt packages *(required)*
 ```bash
-# incr_*.parquet are excluded from git (updated daily by Airflow)
-# Run once to create them before the first dbt build
-python scripts/generate_daily_incremental.py
+dbt deps
 ```
 
-### Step 7 — Run dbt pipeline (one-time full build)
+### Step 7 — Run the pipeline
+
+From Step 7 onwards, you can either run the pipeline **manually** or let **Airflow** handle it.
+
+> **Note**: `inventory_fiscal_report` is excluded from the Airflow DAG (annual full-refresh model). Run it manually regardless of which option you choose.
+> ```bash
+> dbt run --select inventory_fiscal_report
+> ```
+
+#### Option A — Manual
 ```bash
-dbt deps      # install dbt packages (dbt_utils)
-dbt seed      # load audit_materiality_thresholds lookup table
-dbt snapshot  # build scd_products price history
-dbt run       # execute all models
-dbt test      # validate all tests
+python scripts/generate_daily_incremental.py  # initialize incr_*.parquet
+dbt seed                                       # load audit_materiality_thresholds
+dbt snapshot                                   # build scd_products price history
+dbt run                                        # execute all models
+dbt test                                       # validate all tests
 ```
 
-### Step 8 — Start Airflow
+#### Option B — Airflow
 ```bash
 # Builds the Docker image and starts Postgres, webserver, and scheduler
 docker-compose up -d
@@ -349,7 +356,9 @@ docker ps
 Open **http://localhost:8080** and log in with `admin` / `admin`.
 Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC daily, or trigger it manually from the UI.
 
-### Step 9 — Query metrics via Semantic Layer
+The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run (incremental) → dbt test` on every run.
+
+### Step 8 — Query metrics via Semantic Layer
 ```bash
 # Validate semantic model definitions
 mf validate-configs
