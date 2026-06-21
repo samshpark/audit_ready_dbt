@@ -10,15 +10,12 @@
     )
 }}
 
-SELECT
-    CAST(id AS VARCHAR)              AS product_id,
-    CAST(cost AS DOUBLE)             AS cost,
-    CAST(retail_price AS DOUBLE)     AS retail_price,
-    LOWER(category)                  AS category,
-    LOWER(brand)                     AS brand,
-    name                             AS product_name
-FROM {{ source('thelook_ecommerce', 'raw_products') }}
-
+select
+    cast(id as varchar) as product_id,
+    cast(cost as double) as cost,
+    cast(retail_price as double) as retail_price,
+    lower(category) as category,
+    lower(brand) as brand,
+    name as product_name
+from {{ source('thelook_ecommerce', 'raw_products') }}
 {% endsnapshot %}
-
-SELECT * FROM snapshots.scd_products LIMIT 10;

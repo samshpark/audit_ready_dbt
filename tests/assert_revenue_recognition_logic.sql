@@ -1,8 +1,9 @@
-SELECT
+select
     order_id,
     shipped_at,
     recognized_revenue,
     gross_revenue
-FROM {{ ref('revenue') }}
-WHERE (shipped_at IS NULL AND recognized_revenue != 0)
-   OR (shipped_at IS NOT NULL AND recognized_revenue = 0 AND gross_revenue > 0)
+from {{ ref('revenue') }}
+where
+    (shipped_at is null and recognized_revenue <> 0)
+    or (shipped_at is not null and recognized_revenue = 0 and gross_revenue > 0)
