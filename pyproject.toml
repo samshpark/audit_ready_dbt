@@ -1,0 +1,21 @@
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+exclude = [
+    "venv",
+    "dbt_packages",
+    "target",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["dags", "scripts"]

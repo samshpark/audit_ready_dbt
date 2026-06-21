@@ -146,7 +146,10 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 7. SQL Code Quality (SQLFluff)
 * **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
 
-### 8. Semantic Layer (MetricFlow)
+### 8. Python Code Quality (Ruff)
+* **Linter & Formatter**: [Ruff](https://docs.astral.sh/ruff/) — configured in 📂 `pyproject.toml`.
+
+### 9. Semantic Layer (MetricFlow)
 
 Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, reusable business metrics on top of the mart layer. This ensures metric definitions live in version-controlled code rather than scattered across BI tools.
 
@@ -194,7 +197,7 @@ This also explains why the mart layer retains a **denormalized, purpose-built st
 ---
 
 ## 3. Tech Stack & Engineering Value
-* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff.
+* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
 * **Auditability**: End-to-end metadata for clear financial audit trails.
 * **Cost-Efficiency**: Reduced warehouse compute costs by **90%** during development.
 * **Idempotency**: Consistent financial results regardless of re-run frequency.

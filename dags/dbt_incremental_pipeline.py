@@ -13,11 +13,11 @@ Pipeline:
 
 import os
 import sys
+from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
 
 DBT_PROJECT_DIR = os.environ.get("DBT_PROJECT_DIR", "/opt/airflow/dbt_project")
 
@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(DBT_PROJECT_DIR, "scripts"))
 
 def run_generate_incremental(**context) -> None:
     from generate_daily_incremental import generate_today_orders
+
     generate_today_orders(project_dir=DBT_PROJECT_DIR, n_orders=100)
 
 
@@ -40,14 +41,13 @@ default_args = {
 with DAG(
     dag_id="dbt_daily_incremental",
     description="Generate synthetic orders → dbt seed + snapshot → dbt incremental run → dbt test",
-    schedule_interval="0 9 * * *",   # 09:00 UTC every day
+    schedule_interval="0 9 * * *",  # 09:00 UTC every day
     start_date=datetime(2026, 4, 22),
     catchup=False,
-    max_active_runs=1,               # DuckDB only supports one writer at a time
+    max_active_runs=1,  # DuckDB only supports one writer at a time
     default_args=default_args,
     tags=["dbt", "incremental", "daily"],
 ) as dag:
-
     generate_data = PythonOperator(
         task_id="generate_incremental_data",
         python_callable=run_generate_incremental,
@@ -74,8 +74,7 @@ with DAG(
     dbt_run_snapshot = BashOperator(
         task_id="dbt_run_snapshot",
         bash_command=(
-            "cd $DBT_PROJECT_DIR && "
-            "dbt snapshot --profiles-dir . --target dev"
+            "cd $DBT_PROJECT_DIR && dbt snapshot --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
@@ -125,4 +124,11 @@ with DAG(
         doc_md="Run dbt tests across all updated models to validate the daily pipeline output.",
     )
 
-    generate_data >> dbt_seed >> dbt_run_snapshot >> dbt_run_int >> dbt_run_marts >> dbt_test
+    (
+        generate_data
+        >> dbt_seed
+        >> dbt_run_snapshot
+        >> dbt_run_int
+        >> dbt_run_marts
+        >> dbt_test
+    )
