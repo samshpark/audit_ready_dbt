@@ -6,6 +6,7 @@ logs/
 # Credentials
 credentials/
 *.json
+!.vscode/settings.json
 
 .user.yml
 profiles.yml
@@ -29,3 +30,6 @@ notebook/practice.ipynb
 
 # One-time utility, not part of the active pipeline
 scripts/create_sample_order_items.py
+
+# Node
+node_modules/

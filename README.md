@@ -149,7 +149,11 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 8. Python Code Quality (Ruff)
 * **Linter & Formatter**: [Ruff](https://docs.astral.sh/ruff/) — configured in 📂 `pyproject.toml`.
 
-### 9. Semantic Layer (MetricFlow)
+### 9. YAML Code Quality (Prettier + dbt JSON Schema)
+* **Formatter**: [Prettier](https://prettier.io/) — configured in 📂 `.prettierrc`. Run `npm install` to set up.
+* **Schema Validation**: [dbt JSON Schema](https://github.com/dbt-labs/dbt-jsonschema) — validates dbt YAML structure in VS Code (📂 `.vscode/settings.json`).
+
+### 10. Semantic Layer (MetricFlow)
 
 Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, reusable business metrics on top of the mart layer. This ensures metric definitions live in version-controlled code rather than scattered across BI tools.
 
