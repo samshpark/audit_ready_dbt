@@ -57,7 +57,9 @@ metrics:
 
   - name: refund_base_gross_revenue
     label: "Gross Revenue (Refund Base)"
-    description: "Gross revenue from the refund reconciliation model, used as refund rate denominator."
+    description: >-
+      Gross revenue from the refund reconciliation model, used as refund rate
+      denominator.
     type: simple
     type_params:
       measure: refund_gross_revenue

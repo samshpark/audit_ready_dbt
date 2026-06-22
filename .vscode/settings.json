@@ -1,0 +1,24 @@
+{
+    "sqltools.connections": [],
+    "sqltools.useNodeRuntime": true,
+    "dbt.perspectiveTheme": "Vintage",
+    "sqlfluff.executablePath": "/Users/sanghyun/Documents/AE_Project/audit_ready_dbt/venv/bin/sqlfluff",
+    "sqlfluff.workingDirectory": "/Users/sanghyun/Documents/AE_Project/audit_ready_dbt",
+    "yaml.schemaStore.enable": false,
+    "yaml.schemas": {
+        "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_yml_files.json": [
+            "models/**/*.yml",
+            "snapshots/**/*.yml",
+            "seeds/**/*.yml",
+            "macros/**/*.yml",
+            "!models/marts/finance/_finance__metrics.yml",
+            "!models/marts/finance/_finance__semantic_models.yml",
+            "!models/utilities/_utilities__models.yml"
+        ],
+        "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_project.json": []
+    },
+    "editor.formatOnSave": true,
+    "[yaml]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+}

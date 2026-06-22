@@ -1,7 +1,8 @@
 semantic_models:
 
   - name: revenue
-    description: "Order-level revenue recognition model. Grain: one row per order."
+    description: >-
+      Order-level revenue recognition model. Grain: one row per order.
     model: ref('revenue')
     defaults:
       agg_time_dimension: created_at
@@ -32,7 +33,8 @@ semantic_models:
 
     measures:
       - name: recognized_revenue
-        description: "Accrual-basis revenue: counted only when shipped_at is populated."
+        description: >-
+          Accrual-basis revenue: counted only when shipped_at is populated.
         agg: sum
         expr: recognized_revenue
       - name: gross_revenue
@@ -48,7 +50,8 @@ semantic_models:
         expr: total_item_count
 
   - name: refund_reconciliation
-    description: "Order-level refund reconciliation model. Grain: one row per order."
+    description: >-
+      Order-level refund reconciliation model. Grain: one row per order.
     model: ref('refund_reconciliation')
     defaults:
       agg_time_dimension: order_date
@@ -138,7 +141,8 @@ semantic_models:
         agg: sum
         expr: ending_gross_inv_value
       - name: ending_nrv
-        description: "Net Realizable Value after LCM adjustment at fiscal year end."
+        description: >-
+          Net Realizable Value after LCM adjustment at fiscal year end.
         agg: sum
         expr: ending_net_realizable_value
       - name: lcm_allowance

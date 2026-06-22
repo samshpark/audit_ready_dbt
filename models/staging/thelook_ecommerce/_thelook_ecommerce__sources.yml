@@ -2,7 +2,9 @@ version: 2
 
 sources:
   - name: thelook_ecommerce
-    description: "E-commerce dataset extracted from BigQuery and stored as local Parquet files."
+    description: >-
+      E-commerce dataset extracted from BigQuery and stored as local Parquet
+      files.
     loader: python_script
     
     # meta: external_location allows DuckDB to map dbt source names 
@@ -42,10 +44,13 @@ sources:
           - name: delivered_at
             description: "Order Delivered Date; Null if not delivered"
           - name: num_of_item
-            description: "Number of items included in an order (renamed to number_of_items in staging)"
+            description: >-
+              Number of items included in an order (renamed to number_of_items
+              in staging)
       
       - name: raw_order_items
-        description: "Granular table containing individual line items per order."
+        description: >-
+          Granular table containing individual line items per order.
         meta:
           external_location: "data/{name}.parquet"
         columns:
@@ -79,7 +84,8 @@ sources:
                     to: source('thelook_ecommerce', 'raw_products')
                     field: id
           - name: inventory_item_id
-            description: "Foreign key to the inventory_item_id" # Not Included in the ingestion
+            description: >-  # Not Included in the ingestion
+              Foreign key to the inventory_item_id
           - name: sale_price
             description: "sale price of item"
             tests:
@@ -116,10 +122,12 @@ sources:
             tests:
               - not_null
           - name: distribution_center_id
-            description: "Foreign key to the distribution centers table" # Not Included in the ingestion
+            description: >-  # Not Included in the ingestion
+              Foreign key to the distribution centers table
 
       - name: raw_users
-        description: "Customer profile data including sign-up dates and demographics."
+        description: >-
+          Customer profile data including sign-up dates and demographics.
         meta:
           external_location: "data/{name}.parquet"
         columns:
@@ -158,4 +166,5 @@ sources:
                   arguments:
                     expression: ">= 0"
           - name: product_distribution_center_id
-            description: "Foreign key to the distribution centers table" # Not Included in the ingestion
+            description: >-  # Not Included in the ingestion
+              Foreign key to the distribution centers table

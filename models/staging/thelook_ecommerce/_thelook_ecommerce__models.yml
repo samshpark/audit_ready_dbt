@@ -42,7 +42,8 @@ models:
         description: "Foreign key to distribution centers"
 
   - name: stg_thelook_ecommerce__order_items
-    description: "Cleaned and recast individual order line items from raw_order_items."
+    description: >-
+      Cleaned and recast individual order line items from raw_order_items.
     columns:
       - name: order_item_id
         description: "Primary key for order items (cast to string)"

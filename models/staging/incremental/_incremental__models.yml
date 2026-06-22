@@ -19,7 +19,9 @@ models:
         tests:
           - not_null
       - name: user_id
-        description: "Sampled from real BigQuery user IDs to maintain referential plausibility."
+        description: >-
+          Sampled from real BigQuery user IDs to maintain referential
+          plausibility.
         tests:
           - not_null
       - name: product_id
@@ -27,7 +29,9 @@ models:
         tests:
           - not_null
       - name: order_item_status
-        description: "Item-level status (lowercase). Partial refund orders have mixed statuses within the same order_id."
+        description: >-
+          Item-level status (lowercase). Partial refund orders have mixed
+          statuses within the same order_id.
         tests:
           - not_null
           - accepted_values:
@@ -53,13 +57,17 @@ models:
         tests:
           - not_null
       - name: order_status
-        description: "Header-level status (lowercase). Reflects the dominant item status for the order."
+        description: >-
+          Header-level status (lowercase). Reflects the dominant item status for
+          the order.
         tests:
           - not_null
           - accepted_values:
               values: ['complete', 'returned', 'shipped', 'processing', 'cancelled']
       - name: created_at
-        description: "Order creation timestamp (UTC). Fixed to today's date during Airflow run."
+        description: >-
+          Order creation timestamp (UTC). Fixed to today's date during Airflow
+          run.
         tests:
           - not_null
 
@@ -71,7 +79,8 @@ models:
       Unioned with stg_thelook_ecommerce__inventory_items in int_inventory_items_joined.
     columns:
       - name: inventory_item_id
-        description: "Synthetic inventory item ID (negative integer, cast to STRING)."
+        description: >-
+          Synthetic inventory item ID (negative integer, cast to STRING).
         tests:
           - unique
           - not_null
@@ -80,6 +89,8 @@ models:
         tests:
           - not_null
       - name: cost
-        description: "Product acquisition cost sourced from the real product catalog."
+        description: >-
+          Product acquisition cost sourced from the real product catalog.
       - name: product_category
-        description: "Product category (lowercase), sourced from the real product catalog."
+        description: >-
+          Product category (lowercase), sourced from the real product catalog.

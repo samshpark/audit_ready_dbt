@@ -30,19 +30,26 @@ models:
         description: "Quantity of units sold during the fiscal year."
 
       - name: period_cogs_amount
-        description: "Total Cost of Goods Sold (COGS) recognized in the P&L for this fiscal year."
+        description: >-
+          Total Cost of Goods Sold (COGS) recognized in the P&L for this fiscal
+          year.
 
       - name: period_revenue
-        description: "Total sales revenue generated from the sold units in this fiscal year."
+        description: >-
+          Total sales revenue generated from the sold units in this fiscal year.
 
       - name: beginning_inv_value
-        description: "Beginning inventory value at cost, carried over from the previous year's ending inventory."
+        description: >-
+          Beginning inventory value at cost, carried over from the previous
+          year's ending inventory.
 
       - name: period_purchase_amount
-        description: "Total cost of new inventory purchased/received during the fiscal year."
+        description: >-
+          Total cost of new inventory purchased/received during the fiscal year.
 
       - name: ending_gross_inv_value
-        description: "Ending inventory value at cost as of December 31st of the fiscal year."
+        description: >-
+          Ending inventory value at cost as of December 31st of the fiscal year.
 
       - name: ending_allowance_lcm
         description: >
@@ -65,22 +72,29 @@ models:
           - accepted_values:
               values: [0]
               severity: warn
-              description: "Warning if reconciliation fails beyond the 0.019 threshold."
+              description: >-
+                Warning if reconciliation fails beyond the 0.019 threshold.
 
       - name: inventory_turnover_ratio
-        description: "Efficiency ratio: COGS / Average Inventory. Higher indicates better performance."
+        description: >-
+          Efficiency ratio: COGS / Average Inventory. Higher indicates better
+          performance.
 
       - name: gross_profit_margin
         description: "Profitability ratio: (Revenue - COGS) / Revenue."
 
       - name: inventory_risk_rating
-        description: "Classification of inventory health based on aging (days on hand) and valuation (NRV vs Cost)."
+        description: >-
+          Classification of inventory health based on aging (days on hand) and
+          valuation (NRV vs Cost).
         tests:
           - accepted_values:
               values: ['Healthy', 'Warning: Slow Moving', 'Critical: Obsolete', 'Adjustment Required: NRV < Cost']
 
       - name: risk_tier
-        description: "Audit risk tier sourced from audit_materiality_thresholds seed: High / Medium / Low."
+        description: >-
+          Audit risk tier sourced from audit_materiality_thresholds seed: High /
+          Medium / Low.
         tests:
           - not_null
           - accepted_values:
@@ -111,13 +125,17 @@ models:
         description: "Order creation timestamp from master table."
 
       - name: total_order_amount
-        description: "Total order amount from subledger (sum of sale_price per order)."
+        description: >-
+          Total order amount from subledger (sum of sale_price per order).
 
       - name: master_item_count
-        description: "Item count from master table (raw_orders.num_of_item, renamed to number_of_items in staging)."
+        description: >-
+          Item count from master table (raw_orders.num_of_item, renamed to
+          number_of_items in staging).
 
       - name: subledger_item_count
-        description: "Item count from subledger (COUNT of raw_order_items per order)."
+        description: >-
+          Item count from subledger (COUNT of raw_order_items per order).
 
       - name: order_reconciliation
         tests:
@@ -153,7 +171,9 @@ models:
           arguments:
             expression: "refund_amount <= gross_revenue"
             name: assert_refund_not_exceeding_revenue
-            description: "Refund cannot exceed the original transaction value (Audit Control)."
+            description: >-
+              Refund cannot exceed the original transaction value (Audit
+              Control).
 
     columns:
       - name: order_id
@@ -170,7 +190,9 @@ models:
                 values: ['FULLY REFUNDED', 'PARTIALLY REFUNDED', 'NO REFUND']
 
       - name: refund_count_rate
-        description: "Calculated refund count percentage per order. Tested against synthetic edge cases."
+        description: >-
+          Calculated refund count percentage per order. Tested against synthetic
+          edge cases.
         tests:
           - dbt_utils.accepted_range:
               arguments:
@@ -179,7 +201,9 @@ models:
                 inclusive: true
 
       - name: refund_value_rate
-        description: "Calculated refund value percentage per order. Tested against synthetic edge cases."
+        description: >-
+          Calculated refund value percentage per order. Tested against synthetic
+          edge cases.
         tests:
           - dbt_utils.accepted_range:
               arguments:
@@ -188,7 +212,8 @@ models:
                 inclusive: true
 
   - name: revenue
-    description: "Orders and items joined to calculate recognized revenue and audit risks."
+    description: >-
+      Orders and items joined to calculate recognized revenue and audit risks.
     columns:
       - name: order_id
         tests:
@@ -196,20 +221,26 @@ models:
           - not_null
 
       - name: created_at
-        description: "Order creation timestamp (UTC). Used for cut-off period determination."
+        description: >-
+          Order creation timestamp (UTC). Used for cut-off period determination.
 
       - name: shipped_at
-        description: "Shipment timestamp. Null indicates pending shipment. Drives revenue recognition."
+        description: >-
+          Shipment timestamp. Null indicates pending shipment. Drives revenue
+          recognition.
 
       - name: recognized_revenue
-        description: "Accrual-basis revenue: equals gross_revenue only when shipped_at is populated."
+        description: >-
+          Accrual-basis revenue: equals gross_revenue only when shipped_at is
+          populated.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
                 expression: ">= 0"
 
       - name: gross_revenue
-        description: "Total order value from the subledger regardless of shipment status."
+        description: >-
+          Total order value from the subledger regardless of shipment status.
 
       - name: user_id
         tests:
@@ -223,7 +254,8 @@ models:
                 values: ['MATCHED', 'ERR: ORPHAN SUB-LEDGER', 'ERR: MISSING SUB-LEDGER']
 
       - name: cutoff_status
-        description: "Identifies month-end shipping risks for revenue recognition."
+        description: >-
+          Identifies month-end shipping risks for revenue recognition.
         tests:
           - accepted_values:
               arguments:

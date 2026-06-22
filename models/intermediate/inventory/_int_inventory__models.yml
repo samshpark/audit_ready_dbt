@@ -13,13 +13,17 @@ models:
 
     columns:
       - name: inventory_item_id
-        description: "Primary Key. Unique identifier for each physical unit in the warehouse."
+        description: >-
+          Primary Key. Unique identifier for each physical unit in the
+          warehouse.
         tests:
           - unique
           - not_null
 
       - name: product_id
-        description: "Foreign Key to the product catalog. Coalesced from both inbound and outbound sources."
+        description: >-
+          Foreign Key to the product catalog. Coalesced from both inbound and
+          outbound sources.
         tests:
           - not_null
           - relationships:
@@ -27,16 +31,20 @@ models:
               field: product_id
 
       - name: product_category
-        description: "The broad category of the product (e.g., Jeans, Sweaters)."
+        description: >-
+          The broad category of the product (e.g., Jeans, Sweaters).
 
       - name: product_name
         description: "The full descriptive name of the product."
 
       - name: inbound_at
-        description: "Timestamp when the item was first received in the inventory."
+        description: >-
+          Timestamp when the item was first received in the inventory.
 
       - name: outbound_at
-        description: "Timestamp when the item was shipped to a customer. Null if the item is still on-hand."
+        description: >-
+          Timestamp when the item was shipped to a customer. Null if the item is
+          still on-hand.
 
       - name: days_in_inventory
         description: >
@@ -55,25 +63,35 @@ models:
                 expression: ">= 0"
 
       - name: current_market_price
-        description: "The current retail price, used as a proxy for Market Value in LCM calculations."
+        description: >-
+          The current retail price, used as a proxy for Market Value in LCM
+          calculations.
 
       - name: lcm_unit_valuation
-        description: "The carrying value per unit based on the Lower of Cost or Market (LCM) principle."
+        description: >-
+          The carrying value per unit based on the Lower of Cost or Market (LCM)
+          principle.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
                 expression: "<= historical_unit_cost"
-                description: "Inventory cannot be valued higher than its historical cost under conservative accounting."
+                description: >-
+                  Inventory cannot be valued higher than its historical cost
+                  under conservative accounting.
 
       - name: inventory_valuation_loss
-        description: "The unrealized loss (Allowance) recognized when Market Value drops below Cost."
+        description: >-
+          The unrealized loss (Allowance) recognized when Market Value drops
+          below Cost.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
                 expression: ">= 0"
 
       - name: stock_status
-        description: "Classification of the item's current state: On-hand (Ending Inventory) or Sold (COGS)."
+        description: >-
+          Classification of the item's current state: On-hand (Ending Inventory)
+          or Sold (COGS).
         tests:
           - accepted_values:
               arguments:
@@ -93,19 +111,28 @@ models:
               where: "inbound_at is not null"
 
       - name: sale_price
-        description: "The actual sale price at which the item was sold. Null if the item is still on-hand."
+        description: >-
+          The actual sale price at which the item was sold. Null if the item is
+          still on-hand.
 
       - name: product_brand
-        description: "Brand of the product, sourced from inbound inventory record."
+        description: >-
+          Brand of the product, sourced from inbound inventory record.
 
       - name: outbound_fiscal_year
-        description: "Fiscal year extracted from outbound_at. Null if the item has not been sold."
+        description: >-
+          Fiscal year extracted from outbound_at. Null if the item has not been
+          sold.
 
       - name: inbound_fiscal_year
-        description: "Fiscal year extracted from inbound_at. Null if no inbound record exists."
+        description: >-
+          Fiscal year extracted from inbound_at. Null if no inbound record
+          exists.
 
       - name: product_match
-        description: "Internal control flag checking if the Inbound product_id matches the Outbound product_id."
+        description: >-
+          Internal control flag checking if the Inbound product_id matches the
+          Outbound product_id.
         tests:
           - accepted_values:
               arguments:
