@@ -187,6 +187,8 @@ mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
          --group-by product__fiscal_year,product__product_category
 ```
 
+> **Note on `mf query` vs `dbt sl query`**: dbt's official documentation recommends `dbt sl query`, but this applies to the **dbt Cloud CLI** — a separate tool from dbt Core. In dbt Core, `dbt sl` is not available; MetricFlow is invoked directly via `mf query` (provided by the `dbt-metricflow` package). Both commands use the same MetricFlow engine underneath.
+
 #### Architectural Note: Semantic Layer vs. Tableau
 
 This project uses **dbt Core** (not dbt Cloud), which means the Semantic Layer cannot be directly wired into Tableau — that integration requires dbt Cloud's managed Semantic Layer endpoint.
