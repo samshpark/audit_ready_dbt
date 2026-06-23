@@ -174,6 +174,12 @@ Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, re
 #### Example Queries
 
 ```bash
+# List all available metrics
+mf list metrics
+
+# List available dimensions for a metric
+mf list dimensions --metrics total_gross_revenue
+
 # Revenue metrics by month
 mf query --metrics total_gross_revenue,total_recognized_revenue,order_count \
          --group-by metric_time__month
