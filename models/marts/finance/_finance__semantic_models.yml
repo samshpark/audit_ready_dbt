@@ -30,6 +30,10 @@ semantic_models:
         type: categorical
       - name: cutoff_status
         type: categorical
+      - name: is_high_value_order
+        description: "Flags orders with gross_revenue > $200 (approx. top 15% by order value)."
+        type: categorical
+        expr: "case when gross_revenue > 200 then true else false end"
 
     measures:
       - name: recognized_revenue
@@ -46,6 +50,7 @@ semantic_models:
         agg: count_distinct
         expr: order_id
       - name: total_item_count
+        description: "Total number of line items across all orders."
         agg: sum
         expr: total_item_count
 
@@ -86,6 +91,7 @@ semantic_models:
         agg: sum
         expr: net_revenue
       - name: total_returned_items
+        description: "Total number of returned items across refunded orders."
         agg: sum
         expr: total_returned_items
       - name: refunded_order_count
@@ -105,6 +111,9 @@ semantic_models:
       - name: product
         type: primary
         expr: product_id
+      - name: product_category
+        type: foreign
+        expr: product_category
 
     dimensions:
       - name: fiscal_year_end_date
@@ -116,8 +125,6 @@ semantic_models:
         type: categorical
         expr: CAST(fiscal_year AS VARCHAR)
       - name: product_name
-        type: categorical
-      - name: product_category
         type: categorical
       - name: product_brand
         type: categorical
@@ -134,6 +141,7 @@ semantic_models:
         agg: sum
         expr: period_cogs_amount
       - name: period_units_sold
+        description: "Total number of units sold during the fiscal year."
         agg: sum
         expr: period_units_sold
       - name: ending_inventory_value
@@ -149,3 +157,22 @@ semantic_models:
         description: "Total LCM write-down allowance (contra-asset)."
         agg: sum
         expr: ending_allowance_lcm
+
+  - name: audit_materiality
+    description: >-
+      CPA-defined audit materiality thresholds by product category.
+      Grain: one row per product_category. Dimensional model only — no measures.
+    model: ref('audit_materiality_thresholds')
+
+    entities:
+      - name: product_category
+        type: primary
+        expr: product_category
+
+    dimensions:
+      - name: risk_tier
+        type: categorical
+      - name: materiality_threshold
+        type: categorical
+      - name: rationale
+        type: categorical
