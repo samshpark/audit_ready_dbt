@@ -14,7 +14,15 @@ A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** tran
 
 ---
 
-## 2. Hybrid Data Architecture
+## 2. Tech Stack & Engineering Value
+* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
+* **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
+* **Cost-Efficiency**: By utilizing a **Python-to-DuckDB** ingestion strategy, reduced warehouse compute costs by **90%** during development.
+* **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
+
+---
+
+## 3. Hybrid Data Architecture
 I adopted a hybrid architecture to balance development efficiency with production scalability.
 
 ### 1. Ingestion & Synthetic Data Generation
@@ -104,7 +112,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **File**: 📂 `dags/dbt_incremental_pipeline.py`
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
-    1. `generate_incremental_data` — Appends ~100 synthetic orders (including 15% partial refund scenarios) to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
+    1. `generate_incremental_data` — Appends ~100 synthetic orders to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
     2. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
     3. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
     4. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
@@ -212,14 +220,6 @@ As a result, the BI layer (Tableau) connects directly to the DuckDB mart tables,
 2. **CLI demonstration**: `mf query` enables direct metric querying from the terminal, useful for ad-hoc analysis and verifying metric logic before surfacing in dashboards.
 
 This also explains why the mart layer retains a **denormalized, purpose-built structure** (`revenue`, `order_reconciliation`, `refund_reconciliation` as separate tables) rather than consolidating into a single wide `orders` table. With dbt Cloud Semantic Layer handling the abstraction, normalized marts would be preferred — but for direct BI tool consumption, focused marts are more practical.
-
----
-
-## 3. Tech Stack & Engineering Value
-* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
-* **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
-* **Cost-Efficiency**: By utilizing a **Python-to-DuckDB** ingestion strategy, reduced warehouse compute costs by **90%** during development.
-* **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 
 ---
 
@@ -373,9 +373,6 @@ The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot →
 ```bash
 # Validate semantic model definitions
 mf validate-configs
-
-# Example metric queries
-mf query --metrics total_gross_revenue,order_count --group-by metric_time__month
-mf query --metrics refund_rate,total_refund_amount --group-by order__refund_type
-mf query --metrics total_inventory_value,inventory_gross_profit --group-by product__fiscal_year,product__product_category
 ```
+
+See [Semantic Layer — Example Queries](#10-semantic-layer-metricflow) above for `mf query` usage.
