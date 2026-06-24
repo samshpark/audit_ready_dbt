@@ -71,6 +71,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `revenue.sql`: Accrual-based revenue recognition with cut-off risk detection.
     - 📂 `refund_reconciliation.sql`: Linking refunds to original orders.
     - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, turnover ratios, and CPA-defined `risk_tier` / `materiality_threshold` per product category.
+    - 📂 `order_item_revenue.sql`: Item-level revenue model (grain: one row per order item). Enables status-level breakdown (`complete` / `returned` / `shipped` etc.) that is not possible at order grain — essential for partial refund scenarios where a single order contains items with different statuses.
     - 📂 `_finance__models.yml` — consolidated model documentation
     - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
     - 📂 `_finance__metrics.yml` — business metric definitions
@@ -164,12 +165,14 @@ Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, re
 | `revenue` | `revenue` | `order` | `created_at` (day) |
 | `refund_reconciliation` | `refund_reconciliation` | `order` | `order_date` (day) |
 | `inventory_fiscal_report` | `inventory_fiscal_report` | `product` | `fiscal_year_end_date` (year) |
+| `order_item_revenue` | `order_item_revenue` | `order_item` | `created_at` (day) |
 
 | Category | Metrics |
 |---|---|
 | Revenue | `total_recognized_revenue`, `total_gross_revenue`, `order_count`, `revenue_recognition_rate` |
 | Refund | `total_refund_amount`, `total_net_revenue`, `refund_rate`, `refund_base_gross_revenue` |
 | Inventory | `total_inventory_value`, `total_net_realizable_value`, `total_lcm_allowance`, `total_cogs`, `total_period_revenue`, `inventory_gross_profit` |
+| Order Item | `total_item_gross_revenue`, `total_recognized_item_revenue`, `item_count`, `item_recognition_rate` |
 
 #### Example Queries
 
@@ -191,6 +194,10 @@ mf query --metrics refund_rate,total_refund_amount,total_net_revenue \
 # Inventory valuation by fiscal year and product category
 mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
          --group-by product__fiscal_year,product__product_category
+
+# Item-level revenue breakdown by order item status (handles partial refund scenarios)
+mf query --metrics total_recognized_item_revenue,total_item_gross_revenue \
+         --group-by order_item__order_item_status
 ```
 
 > **Note on `mf query` vs `dbt sl query`**: dbt's official documentation recommends `dbt sl query`, but this applies to the **dbt Cloud CLI** — a separate tool from dbt Core. In dbt Core, `dbt sl` is not available; MetricFlow is invoked directly via `mf query` (provided by the `dbt-metricflow` package). Both commands use the same MetricFlow engine underneath.
@@ -210,9 +217,9 @@ This also explains why the mart layer retains a **denormalized, purpose-built st
 
 ## 3. Tech Stack & Engineering Value
 * **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
-* **Auditability**: End-to-end metadata for clear financial audit trails.
-* **Cost-Efficiency**: Reduced warehouse compute costs by **90%** during development.
-* **Idempotency**: Consistent financial results regardless of re-run frequency.
+* **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
+* **Cost-Efficiency**: By utilizing a **Python-to-DuckDB** ingestion strategy, reduced warehouse compute costs by **90%** during development.
+* **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 
 ---
 
@@ -278,15 +285,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 
 ---
 
-## 5. Engineering Excellence (CPA Insight)
-
-* **Audit Trail:** Every model is documented with metadata to provide a clear path from raw data to final report—essential for financial audits.
-* **Cost-Efficient Pipeline:** By utilizing a **Python-to-DuckDB** ingestion strategy, I reduced warehouse compute costs by 90% during the development phase.
-* **Idempotency:** Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
-
----
-
-## 6. Roadmap
+## 5. Roadmap
 The following features are planned for future development:
 
 * **Dynamic Financial Dashboards:** Tableau dashboard connecting directly to DuckDB mart tables, visualizing revenue recognition, refund trends, and inventory health.
@@ -294,7 +293,7 @@ The following features are planned for future development:
 
 ---
 
-## 7. Getting Started
+## 6. Getting Started
 
 **Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
