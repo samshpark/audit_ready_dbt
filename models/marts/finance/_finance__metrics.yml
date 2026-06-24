@@ -114,6 +114,70 @@ metrics:
         name: total_item_gross_revenue
 
   # -------------------------------------------------------
+  # MoM Growth Metrics
+  # -------------------------------------------------------
+
+  - name: revenue_growth_mom
+    label: "Revenue Growth % M/M"
+    description: >
+      Month-over-month percentage growth in recognized (shipped) revenue.
+      Negative values flag revenue contraction for audit review.
+    type: derived
+    type_params:
+      expr: (current_revenue - revenue_prev_month) * 100 / revenue_prev_month
+      metrics:
+        - name: total_recognized_revenue
+          alias: current_revenue
+        - name: total_recognized_revenue
+          alias: revenue_prev_month
+          offset_window: 1 month
+
+  - name: gross_revenue_growth_mom
+    label: "Gross Revenue Growth % M/M"
+    description: >
+      Month-over-month percentage growth in gross revenue (pre-recognition).
+      Compare with revenue_growth_mom to detect recognition lag widening.
+    type: derived
+    type_params:
+      expr: (current_gross - prev_gross) * 100 / prev_gross
+      metrics:
+        - name: total_gross_revenue
+          alias: current_gross
+        - name: total_gross_revenue
+          alias: prev_gross
+          offset_window: 1 month
+
+  - name: refund_rate_change_mom
+    label: "Refund Rate Change M/M (pp)"
+    description: >
+      Month-over-month change in refund rate in percentage points.
+      A rising value is a key audit signal for return anomalies.
+    type: derived
+    type_params:
+      expr: current_refund_rate - prev_refund_rate
+      metrics:
+        - name: refund_rate
+          alias: current_refund_rate
+        - name: refund_rate
+          alias: prev_refund_rate
+          offset_window: 1 month
+
+  - name: item_revenue_growth_mom
+    label: "Item Revenue Growth % M/M"
+    description: >
+      Month-over-month percentage growth in recognized item-level revenue.
+      Can be broken down by order_item_status for partial refund trend analysis.
+    type: derived
+    type_params:
+      expr: (current_item_revenue - prev_item_revenue) * 100 / prev_item_revenue
+      metrics:
+        - name: total_recognized_item_revenue
+          alias: current_item_revenue
+        - name: total_recognized_item_revenue
+          alias: prev_item_revenue
+          offset_window: 1 month
+
+  # -------------------------------------------------------
   # Inventory Metrics
   # -------------------------------------------------------
 

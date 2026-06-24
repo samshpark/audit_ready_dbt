@@ -181,6 +181,7 @@ Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, re
 | Refund | `total_refund_amount`, `total_net_revenue`, `refund_rate`, `refund_base_gross_revenue` |
 | Inventory | `total_inventory_value`, `total_net_realizable_value`, `total_lcm_allowance`, `total_cogs`, `total_period_revenue`, `inventory_gross_profit` |
 | Order Item | `total_item_gross_revenue`, `total_recognized_item_revenue`, `item_count`, `item_recognition_rate` |
+| MoM Growth | `revenue_growth_mom`, `gross_revenue_growth_mom`, `refund_rate_change_mom`, `item_revenue_growth_mom` |
 
 #### Example Queries
 
@@ -206,6 +207,10 @@ mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
 # Item-level revenue breakdown by order item status (handles partial refund scenarios)
 mf query --metrics total_recognized_item_revenue,total_item_gross_revenue \
          --group-by order_item__order_item_status
+
+# MoM growth metrics — revenue trend and refund rate anomaly detection
+mf query --metrics revenue_growth_mom,gross_revenue_growth_mom --group-by metric_time__month
+mf query --metrics refund_rate_change_mom --group-by metric_time__month
 ```
 
 > **Note on `mf query` vs `dbt sl query`**: dbt's official documentation recommends `dbt sl query`, but this applies to the **dbt Cloud CLI** — a separate tool from dbt Core. In dbt Core, `dbt sl` is not available; MetricFlow is invoked directly via `mf query` (provided by the `dbt-metricflow` package). Both commands use the same MetricFlow engine underneath.
