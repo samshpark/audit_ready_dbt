@@ -114,6 +114,44 @@ metrics:
         name: total_item_gross_revenue
 
   # -------------------------------------------------------
+  # Cumulative Metrics
+  # -------------------------------------------------------
+
+  - name: cumulative_recognized_revenue
+    label: "Cumulative Recognized Revenue"
+    description: >
+      All-time cumulative recognized revenue. Filter by year to get YTD figures
+      for period-end audit verification.
+    type: cumulative
+    type_params:
+      measure: recognized_revenue
+
+  - name: cumulative_gross_revenue
+    label: "Cumulative Gross Revenue"
+    description: >
+      All-time cumulative gross revenue. Compare with cumulative_recognized_revenue
+      to track unrecognized backlog growth over time.
+    type: cumulative
+    type_params:
+      measure: gross_revenue
+
+  - name: cumulative_refund_amount
+    label: "Cumulative Refund Amount"
+    description: >
+      All-time cumulative refund amount. Use with year filter for YTD refund
+      exposure at any period-end.
+    type: cumulative
+    type_params:
+      measure: refund_amount
+
+  - name: cumulative_order_count
+    label: "Cumulative Order Count"
+    description: "All-time cumulative number of orders."
+    type: cumulative
+    type_params:
+      measure: order_count
+
+  # -------------------------------------------------------
   # MoM Growth Metrics
   # -------------------------------------------------------
 

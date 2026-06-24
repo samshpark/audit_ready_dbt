@@ -181,6 +181,7 @@ Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, re
 | Refund | `total_refund_amount`, `total_net_revenue`, `refund_rate`, `refund_base_gross_revenue` |
 | Inventory | `total_inventory_value`, `total_net_realizable_value`, `total_lcm_allowance`, `total_cogs`, `total_period_revenue`, `inventory_gross_profit` |
 | Order Item | `total_item_gross_revenue`, `total_recognized_item_revenue`, `item_count`, `item_recognition_rate` |
+| Cumulative | `cumulative_recognized_revenue`, `cumulative_gross_revenue`, `cumulative_refund_amount`, `cumulative_order_count` |
 | MoM Growth | `revenue_growth_mom`, `gross_revenue_growth_mom`, `refund_rate_change_mom`, `item_revenue_growth_mom` |
 
 #### Example Queries
@@ -207,6 +208,11 @@ mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
 # Item-level revenue breakdown by order item status (handles partial refund scenarios)
 mf query --metrics total_recognized_item_revenue,total_item_gross_revenue \
          --group-by order_item__order_item_status
+
+# Cumulative YTD recognized revenue by month (filter by year for period-end audit)
+mf query --metrics cumulative_recognized_revenue \
+         --group-by metric_time__month \
+         --where "metric_time__day >= '2024-01-01' AND metric_time__day < '2025-01-01'"
 
 # MoM growth metrics — revenue trend and refund rate anomaly detection
 mf query --metrics revenue_growth_mom,gross_revenue_growth_mom --group-by metric_time__month
