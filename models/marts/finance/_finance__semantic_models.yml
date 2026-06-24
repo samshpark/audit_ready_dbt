@@ -158,6 +158,55 @@ semantic_models:
         agg: sum
         expr: ending_allowance_lcm
 
+  - name: order_item_revenue
+    description: >-
+      Order item-level revenue model. Grain: one row per order item.
+      Enables item status breakdown (complete / returned / shipped / etc.)
+      that is not possible at order grain.
+    model: ref('order_item_revenue')
+    defaults:
+      agg_time_dimension: created_at
+
+    entities:
+      - name: order_item
+        type: primary
+        expr: order_item_id
+      - name: order
+        type: foreign
+        expr: order_id
+      - name: user
+        type: foreign
+        expr: user_id
+      - name: product
+        type: foreign
+        expr: product_id
+
+    dimensions:
+      - name: created_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: shipped_at
+        type: time
+        type_params:
+          time_granularity: day
+      - name: order_item_status
+        type: categorical
+
+    measures:
+      - name: item_gross_revenue
+        description: "Total sale price across all items regardless of status."
+        agg: sum
+        expr: sale_price
+      - name: recognized_item_revenue
+        description: "Accrual-basis revenue at item level: counted only when shipped_at is populated."
+        agg: sum
+        expr: recognized_item_revenue
+      - name: item_count
+        description: "Total number of order items."
+        agg: count_distinct
+        expr: order_item_id
+
   - name: audit_materiality
     description: >-
       CPA-defined audit materiality thresholds by product category.

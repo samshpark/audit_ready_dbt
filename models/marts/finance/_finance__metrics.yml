@@ -30,12 +30,12 @@ metrics:
     description: >
       Ratio of recognized (shipped) revenue to gross revenue.
       Low values indicate a high backlog of unshipped orders.
-    type: derived
+    type: ratio
     type_params:
-      expr: total_recognized_revenue / total_gross_revenue
-      metrics:
-        - name: total_recognized_revenue
-        - name: total_gross_revenue
+      numerator:
+        name: total_recognized_revenue
+      denominator:
+        name: total_gross_revenue
 
   # -------------------------------------------------------
   # Refund Metrics
@@ -69,12 +69,49 @@ metrics:
     description: >
       Refund amount as a proportion of gross revenue.
       Key audit metric for revenue integrity.
-    type: derived
+    type: ratio
     type_params:
-      expr: total_refund_amount / refund_base_gross_revenue
-      metrics:
-        - name: total_refund_amount
-        - name: refund_base_gross_revenue
+      numerator:
+        name: total_refund_amount
+      denominator:
+        name: refund_base_gross_revenue
+
+  # -------------------------------------------------------
+  # Order Item Metrics
+  # -------------------------------------------------------
+
+  - name: total_item_gross_revenue
+    label: "Total Item Gross Revenue"
+    description: "Total sale price across all order items regardless of status."
+    type: simple
+    type_params:
+      measure: item_gross_revenue
+
+  - name: total_recognized_item_revenue
+    label: "Total Recognized Item Revenue"
+    description: "Accrual-basis revenue at item level: counted only when shipped_at is populated."
+    type: simple
+    type_params:
+      measure: recognized_item_revenue
+
+  - name: item_count
+    label: "Item Count"
+    description: "Total number of order items."
+    type: simple
+    type_params:
+      measure: item_count
+
+  - name: item_recognition_rate
+    label: "Item Recognition Rate"
+    description: >
+      Ratio of recognized (shipped) item revenue to gross item revenue.
+      Breakdowns by order_item_status show which status buckets drive unrecognized revenue.
+    type: ratio
+    type_params:
+      numerator:
+        name: total_recognized_item_revenue
+      denominator:
+        name: total_item_gross_revenue
 
   # -------------------------------------------------------
   # Inventory Metrics
