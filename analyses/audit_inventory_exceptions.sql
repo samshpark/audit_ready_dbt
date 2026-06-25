@@ -1,17 +1,17 @@
 -- Identifies inventory records that require auditor attention:
---   1. Inventory equation imbalance (Beginning + Purchase - Ending ≠ COGS)
+--   1. Inventory equation imbalance (Beginning + Purchase - Ending != COGS)
 --   2. LCM write-down required (NRV < Cost)
 --   3. Slow-moving or obsolete stock
 --
 -- Usage: dbt compile -s analyses/audit_inventory_exceptions
 --        then copy SQL from target/compiled/ and run directly
 
-WITH inventory AS (
-    SELECT * FROM {{ ref('inventory_fiscal_report') }}
+with inventory as (
+    select * from {{ ref('inventory_fiscal_report') }}
 ),
 
-flagged AS (
-    SELECT
+flagged as (
+    select
         fiscal_year,
         product_id,
         product_name,
@@ -26,27 +26,30 @@ flagged AS (
         inventory_turnover_ratio,
         gross_profit_margin,
 
-        -- Classify the exception type for triage
-        CASE
-            WHEN audit_check_diff != 0                        THEN 'INVENTORY EQUATION IMBALANCE'
-            WHEN inventory_risk_rating = 'Critical: Obsolete' THEN 'OBSOLETE STOCK'
-            WHEN inventory_risk_rating = 'Warning: Slow Moving' THEN 'SLOW-MOVING STOCK'
-            WHEN inventory_risk_rating = 'Adjustment Required: NRV < Cost' THEN 'LCM WRITE-DOWN REQUIRED'
-        END AS exception_type
+        case
+            when audit_check_diff <> 0
+                then 'INVENTORY EQUATION IMBALANCE'
+            when inventory_risk_rating = 'Critical: Obsolete'
+                then 'OBSOLETE STOCK'
+            when inventory_risk_rating = 'Warning: Slow Moving'
+                then 'SLOW-MOVING STOCK'
+            when inventory_risk_rating = 'Adjustment Required: NRV < Cost'
+                then 'LCM WRITE-DOWN REQUIRED'
+        end as exception_type
 
-    FROM inventory
-    WHERE
-        audit_check_diff != 0
-        OR inventory_risk_rating != 'Healthy'
+    from inventory
+    where
+        audit_check_diff <> 0
+        or inventory_risk_rating <> 'Healthy'
 )
 
-SELECT *
-FROM flagged
-ORDER BY
-    CASE exception_type
-        WHEN 'INVENTORY EQUATION IMBALANCE'  THEN 1
-        WHEN 'LCM WRITE-DOWN REQUIRED'       THEN 2
-        WHEN 'OBSOLETE STOCK'                THEN 3
-        WHEN 'SLOW-MOVING STOCK'             THEN 4
-    END,
-    ABS(audit_check_diff) DESC
+select *
+from flagged
+order by
+    case exception_type
+        when 'INVENTORY EQUATION IMBALANCE' then 1
+        when 'LCM WRITE-DOWN REQUIRED' then 2
+        when 'OBSOLETE STOCK' then 3
+        when 'SLOW-MOVING STOCK' then 4
+    end,
+    abs(audit_check_diff) desc
