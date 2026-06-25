@@ -19,15 +19,15 @@ sources:
           - name: order_id
             description: "Primary key for orders"
             tests:
-              - unique # test unique value for the primary key
-              - not_null # test null value for the primary key
+              - unique
+              - not_null
           - name: user_id
             description: "Foreign key to the user table"
             tests:
               - not_null
               - relationships:
                   arguments:
-                    to: source('thelook_ecommerce', 'raw_users') # to check if this foreign key exists in raw_users table
+                    to: source('thelook_ecommerce', 'raw_users')
                     field: id
           - name: status
             description: "Current State of order"
