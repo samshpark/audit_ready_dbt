@@ -7,7 +7,7 @@ exclude_rules = ST06, RF04, AM06
 [sqlfluff:templater:dbt]
 project_dir = .
 profiles_dir = .
-target = dev
+target = lint
 
 [sqlfluff:rules:capitalisation.keywords]
 capitalisation_policy = lower
