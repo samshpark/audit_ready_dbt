@@ -11,6 +11,7 @@ credentials/
 .user.yml
 profiles.yml
 dev.duckdb
+dev_pu.duckdb
 lint.duckdb
 
 # BigQuery-sourced data is tracked in git for reviewer convenience (~4MB, static)
