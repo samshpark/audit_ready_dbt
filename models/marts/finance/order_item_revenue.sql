@@ -1,7 +1,5 @@
 with order_items as (
-    select * from {{ ref('stg_thelook_ecommerce__order_items') }}
-    union all
-    select * from {{ ref('stg_incremental__order_items') }}
+    select * from {{ ref('int_order_items_unioned') }}
 ),
 
 final as (

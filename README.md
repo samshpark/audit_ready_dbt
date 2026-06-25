@@ -68,6 +68,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `_incremental__models.yml` — consolidated model documentation
 
 * **Intermediate Layer**:
+    - 📂 `models/intermediate/orders/int_order_items_unioned.sql`: UNION ALL of BigQuery-sourced and incremental order items at item grain. Shared base for `int_order_items_aggregated` and `order_item_revenue`.
     - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
     - 📂 `models/intermediate/orders/int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
     - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
