@@ -91,7 +91,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 > **Materialization Strategy**:
 > - **Staging**: `view` — zero storage cost, always reflects the latest source data.
 > - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons: (1) `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times; (2) intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
-> - **Marts**: `order_reconciliation`, `revenue`, and `refund_reconciliation` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml` — filtering on business timestamps (`first_item_created_at`, `last_refund_at`) to capture both new orders and late-arriving refunds. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
+> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml`. `order_item_revenue` filters on `created_at`, `shipped_at`, and `returned_at` to capture new items, late shipments, and returns. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain. Documented in 📂 `macros/_macros.yml`.
@@ -117,7 +117,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
     2. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
     3. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
     4. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
-    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`
+    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue`
     6. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
 
 > **Note**: Steps 2–3 run sequentially (not in parallel) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time.

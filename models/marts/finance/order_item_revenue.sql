@@ -1,3 +1,11 @@
+{{
+    config(
+        materialized = 'incremental',
+        unique_key = 'order_item_id',
+        incremental_strategy = 'merge'
+    )
+}}
+
 with order_items as (
     select * from {{ ref('int_order_items_unioned') }}
 ),
@@ -21,3 +29,9 @@ final as (
 )
 
 select * from final
+{% if is_incremental() %}
+    where
+        created_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
+        or shipped_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
+        or returned_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
+{% endif %}

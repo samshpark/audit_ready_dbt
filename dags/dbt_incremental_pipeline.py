@@ -100,12 +100,12 @@ with DAG(
         task_id="dbt_run_marts",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select revenue order_reconciliation refund_reconciliation --profiles-dir . --target dev"
+            "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
         doc_md=(
-            "Incrementally merge updated orders into the three order-level mart models. "
+            "Incrementally merge updated orders into the four order-level mart models. "
             "inventory_fiscal_report is excluded — year-level aggregation requires full refresh."
         ),
     )
@@ -116,7 +116,7 @@ with DAG(
             "cd $DBT_PROJECT_DIR && "
             "dbt test --select "
             "stg_incremental__order_items stg_incremental__orders stg_incremental__inventory_items "
-            "int_order_items_aggregated revenue order_reconciliation refund_reconciliation "
+            "int_order_items_aggregated revenue order_reconciliation refund_reconciliation order_item_revenue "
             "--profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},

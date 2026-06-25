@@ -211,6 +211,44 @@ models:
                 max_value: 1
                 inclusive: true
 
+  - name: order_item_revenue
+    description: >-
+      Item-level revenue model. Grain: one row per order item.
+      Enables status-level breakdown not possible at order grain.
+    columns:
+      - name: order_item_id
+        description: "Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        tests:
+          - not_null
+      - name: user_id
+        tests:
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
+      - name: order_item_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['processing', 'shipped', 'complete', 'returned', 'cancelled']
+      - name: sale_price
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
+      - name: recognized_item_revenue
+        description: "Accrual-basis revenue at item level: sale_price when shipped, 0 otherwise."
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
   - name: revenue
     description: >-
       Orders and items joined to calculate recognized revenue and audit risks.
