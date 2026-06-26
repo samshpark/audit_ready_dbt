@@ -55,4 +55,3 @@ final as (
 )
 
 select * from final
-{# WHERE refund_type = 'PARTIALLY REFUNDED' - partial refund test filter #}

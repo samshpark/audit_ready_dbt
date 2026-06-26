@@ -2,6 +2,9 @@
 dialect = duckdb
 templater = dbt
 runaway_limit = 10
+# ST06: allow wildcard (*) at any position — used in staging `select * from renamed` pattern
+# RF04: allow DuckDB reserved words (e.g. year, month) as column identifiers
+# AM06: allow positional GROUP BY (e.g. GROUP BY 1, 2) used in inventory_fiscal_report
 exclude_rules = ST06, RF04, AM06
 
 [sqlfluff:templater:dbt]
