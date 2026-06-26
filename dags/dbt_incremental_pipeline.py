@@ -13,19 +13,25 @@ Pipeline:
 
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+from airflow.utils.dates import days_ago
 
 DBT_PROJECT_DIR = os.environ.get("DBT_PROJECT_DIR", "/opt/airflow/dbt_project")
 
-# Add the dbt project's scripts/ to the Python path so we can import directly
 sys.path.insert(0, os.path.join(DBT_PROJECT_DIR, "scripts"))
 
 
 def run_generate_incremental(**context) -> None:
+    script_path = os.path.join(DBT_PROJECT_DIR, "scripts", "generate_daily_incremental.py")
+    if not os.path.exists(script_path):
+        raise FileNotFoundError(
+            f"generate_daily_incremental.py not found at {script_path}. "
+            "Ensure the scripts/ directory is present and mounted correctly in docker-compose.yml."
+        )
     from generate_daily_incremental import generate_today_orders
 
     generate_today_orders(project_dir=DBT_PROJECT_DIR, n_orders=100)
@@ -42,7 +48,7 @@ with DAG(
     dag_id="dbt_daily_incremental",
     description="Generate synthetic orders → dbt seed + snapshot → dbt incremental run → dbt test",
     schedule_interval="0 9 * * *",  # 09:00 UTC every day
-    start_date=datetime(2026, 4, 22),
+    start_date=days_ago(1),
     catchup=False,
     max_active_runs=1,  # DuckDB only supports one writer at a time
     default_args=default_args,
