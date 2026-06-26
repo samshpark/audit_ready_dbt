@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: SQLFluff Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install sqlfluff sqlfluff-templater-dbt dbt-duckdb==1.10.0
+
+      - name: Create CI profile
+        run: |
+          cat > profiles.yml <<'EOF'
+          audit_ready_dbt:
+            target: lint
+            outputs:
+              lint:
+                type: duckdb
+                path: ":memory:"
+          EOF
+
+      - name: dbt deps
+        run: dbt deps --profiles-dir . --target lint
+
+      - name: SQLFluff lint
+        run: sqlfluff lint models/ analyses/ tests/
+
+  dbt-test:
+    name: dbt Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install dbt-duckdb==1.10.0 pandas pyarrow
+
+      - name: Create CI profile
+        run: |
+          cat > profiles.yml <<'EOF'
+          audit_ready_dbt:
+            target: dev
+            outputs:
+              dev:
+                type: duckdb
+                path: dev.duckdb
+          EOF
+
+      - name: Create empty incremental parquet stubs
+        # incr_*.parquet are gitignored (generated daily by Airflow).
+        # Empty stubs with the correct schema allow dbt to compile and test
+        # the incremental staging models; downstream unions just use thelook data.
+        run: |
+          python - <<'PYEOF'
+          import pandas as pd
+
+          pd.DataFrame(columns=[
+              "id", "order_id", "user_id", "product_id", "inventory_item_id",
+              "status", "sale_price", "created_at", "shipped_at", "delivered_at", "returned_at",
+          ]).to_parquet("data/incr_order_items.parquet", index=False)
+
+          pd.DataFrame(columns=[
+              "order_id", "user_id", "status", "gender", "num_of_item",
+              "created_at", "returned_at", "shipped_at", "delivered_at",
+          ]).to_parquet("data/incr_orders.parquet", index=False)
+
+          pd.DataFrame(columns=[
+              "id", "product_id", "product_distribution_center_id",
+              "product_category", "product_name", "product_brand",
+              "product_department", "product_sku", "cost", "product_retail_price",
+              "created_at", "sold_at",
+          ]).to_parquet("data/incr_inventory_items.parquet", index=False)
+
+          print("Incremental stubs created.")
+          PYEOF
+
+      - name: dbt deps
+        run: dbt deps --profiles-dir .
+
+      - name: dbt build
+        run: dbt build --profiles-dir . --target dev
