@@ -51,7 +51,11 @@ models:
           - not_null
 
       - name: user_id
-        description: "Foreign Key to the customer who placed the order."
+        description: >-
+          Foreign key to the customer who placed the order.
+          Validated against stg_thelook_ecommerce__users for both sources:
+          incremental user_ids are sampled from real BigQuery user IDs, so
+          no separate users table exists for the incremental source.
         tests:
           - not_null
           - relationships:
