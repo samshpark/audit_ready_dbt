@@ -155,7 +155,14 @@ models:
                 values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
 
       - name: order_status_recon
-        description: "Identify if order status in master & sub-ledger agrees"
+        description: >-
+          Raw status discrepancy flag: VARIANCE DETECTED whenever master_order_status
+          does not exactly equal subledger_order_status (the comma-separated item status list).
+          Intentionally broad — legitimate patterns such as partial refunds (master: 'complete',
+          subledger: 'complete,returned') and mixed shipping progress (master: 'shipped',
+          subledger: 'complete,shipped') also produce VARIANCE DETECTED here.
+          Use assert_no_variance_in_order_recon to exclude those known patterns and surface
+          only true anomalies.
         tests:
           - accepted_values:
               arguments:

@@ -33,7 +33,7 @@ models:
 
   - name: int_order_items_aggregated
     description: >
-      An order-level summary aggregated from individual order items (stg_thelook_ecommerce__order_items).
+      An order-level summary aggregated from individual order items (int_order_items_unioned).
       Each row represents one order, consolidating item counts, total sale amounts,
       return metrics, and status information. This model serves as a reliable
       sub-ledger for revenue recognition and refund liability reporting.
