@@ -91,6 +91,13 @@ models:
       - name: cost
         description: >-
           Product acquisition cost sourced from the real product catalog.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
       - name: product_category
         description: >-
           Product category (lowercase), sourced from the real product catalog.
+        tests:
+          - not_null

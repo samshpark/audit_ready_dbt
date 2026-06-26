@@ -74,7 +74,7 @@ with DAG(
     dbt_run_snapshot = BashOperator(
         task_id="dbt_run_snapshot",
         bash_command=(
-            "cd $DBT_PROJECT_DIR && dbt snapshot --profiles-dir . --target dev"
+            "cd $DBT_PROJECT_DIR && dbt snapshot --select scd_products --profiles-dir . --target dev"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
