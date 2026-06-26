@@ -1,6 +1,9 @@
 semantic_models:
 
   - name: revenue
+    config:
+      docs:
+        node_color: "#F1948A"
     description: >-
       Order-level revenue recognition model. Grain: one row per order.
     model: ref('revenue')
@@ -55,6 +58,9 @@ semantic_models:
         expr: total_item_count
 
   - name: refund_reconciliation
+    config:
+      docs:
+        node_color: "#F1948A"
     description: >-
       Order-level refund reconciliation model. Grain: one row per order.
     model: ref('refund_reconciliation')
@@ -100,6 +106,9 @@ semantic_models:
         expr: order_id
 
   - name: inventory_fiscal_report
+    config:
+      docs:
+        node_color: "#F1948A"
     description: >
       Annual inventory valuation model. Grain: one row per (product_id, fiscal_year).
       fiscal_year (integer) is converted to fiscal year-end date (Dec 31) for time aggregation.
@@ -159,6 +168,9 @@ semantic_models:
         expr: ending_allowance_lcm
 
   - name: order_item_revenue
+    config:
+      docs:
+        node_color: "#F1948A"
     description: >-
       Order item-level revenue model. Grain: one row per order item.
       Enables item status breakdown (complete / returned / shipped / etc.)
@@ -208,6 +220,9 @@ semantic_models:
         expr: order_item_id
 
   - name: audit_materiality
+    config:
+      docs:
+        node_color: "#F1948A"
     description: >-
       CPA-defined audit materiality thresholds by product category.
       Grain: one row per product_category. Dimensional model only — no measures.

@@ -6,8 +6,7 @@ sources:
       E-commerce dataset extracted from BigQuery and stored as local Parquet
       files.
     loader: python_script
-    
-    # meta: external_location allows DuckDB to map dbt source names 
+    # meta: external_location allows DuckDB to map dbt source names
     # directly to the local file path. {name} maps to the table name below.
     
     tables:

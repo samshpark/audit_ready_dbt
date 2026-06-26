@@ -43,12 +43,18 @@ I adopted a hybrid architecture to balance development efficiency with productio
 **Visualizing the Audit-Ready Data Pipeline**
 * **Layered Architecture**: Implemented a 4-tier structure (Staging → Intermediate → Marts → Semantic Layer) to ensure data traceability.
 * **Color-Coded Nodes**:
-    - 🟢 Light Green: Raw Sources
-    - 🟤 Brown: Seeds (Lookup tables)
-    - 🟩 MediumSeaGreen: Staging Layer (Initial cleaning and casting)
-    - 🟠 Orange: Intermediate Layer
-    - 🔵 RoyalBlue: Final Financial Marts
-    - 🔴 Red: Automated Data Quality Tests
+    - ![#27AE60](https://placehold.co/12x12/27AE60/27AE60.png) Raw Sources: BigQuery thelook & Airflow incremental
+    - ![#8D6E63](https://placehold.co/12x12/8D6E63/8D6E63.png) Seeds (lookup tables)
+    - ![#2980B9](https://placehold.co/12x12/2980B9/2980B9.png) thelook Staging Layer
+    - ![#F1C40F](https://placehold.co/12x12/F1C40F/F1C40F.png) Incremental Staging Layer
+    - ![#E67E22](https://placehold.co/12x12/E67E22/E67E22.png) Intermediate Layer
+    - ![#8E44AD](https://placehold.co/12x12/8E44AD/8E44AD.png) Financial Marts
+    - ![#F0B27A](https://placehold.co/12x12/F0B27A/F0B27A.png) Snapshots (scd_products)
+    - ![#5DADE2](https://placehold.co/12x12/5DADE2/5DADE2.png) Analyses
+    - ![#F1948A](https://placehold.co/12x12/F1948A/F1948A.png) Semantic Models (MetricFlow)
+    - ![#E84393](https://placehold.co/12x12/E84393/E84393.png) MetricFlow Metrics (default dbt color)
+    - ![#1A252F](https://placehold.co/12x12/1A252F/1A252F.png) Utilities
+    - ![#E74C3C](https://placehold.co/12x12/E74C3C/E74C3C.png) Automated Data Quality Tests
 
 #### Model Directory
 * **Staging Layer** (`models/staging/thelook_ecommerce/`):

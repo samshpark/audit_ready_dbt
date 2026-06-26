@@ -2,11 +2,11 @@
 # Name your project! Project names should contain only lowercase characters
 # and underscores. A good package name should reflect your organization's
 # name or the intended use of these models
-name: 'audit_ready_dbt'
-version: '1.0.0'
+name: "audit_ready_dbt"
+version: "1.0.0"
 
 # This setting configures which "profile" dbt uses for this project.
-profile: 'audit_ready_dbt'
+profile: "audit_ready_dbt"
 
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
@@ -18,39 +18,44 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets: # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
-
 
 models:
   audit_ready_dbt:
     # Config indicated by + and applies to all files under models/example/
     staging:
       +materialized: view
-      +docs:
-        node_color: "MediumSeaGreen"
+      thelook_ecommerce:
+        +docs:
+          node_color: "#2980B9"
       incremental:
         +docs:
-          node_color: "#27AE60"
+          node_color: "#F1C40F"
     intermediate:
       +materialized: view
       +schema: intermediate
       +docs:
-        node_color: "Orange"
+        node_color: "#E67E22"
     marts:
       +materialized: table
       +docs:
-        node_color: "RoyalBlue"
+        node_color: "#8E44AD"
       finance:
         +schema: finance
     utilities:
       +materialized: table
       +docs:
-        node_color: "#95A5A6"
+        node_color: "#1A252F"
 
 vars:
   incremental_lookback_days: 1
+
+snapshots:
+  audit_ready_dbt:
+    +docs:
+      node_color: "#F0B27A"
 
 seeds:
   audit_ready_dbt:
@@ -60,4 +65,4 @@ seeds:
 tests:
   audit_ready_dbt:
     +docs:
-      node_color: "#E74C3C" 
+      node_color: "#E74C3C"
