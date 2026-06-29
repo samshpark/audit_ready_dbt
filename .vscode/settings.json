@@ -2,6 +2,7 @@
     "sqltools.connections": [],
     "sqltools.useNodeRuntime": true,
     "dbt.perspectiveTheme": "Vintage",
+    "dbt.targetName": "dev_pu",
     "sqlfluff.executablePath": "/Users/sanghyun/Documents/AE_Project/audit_ready_dbt/venv/bin/sqlfluff",
     "sqlfluff.workingDirectory": "/Users/sanghyun/Documents/AE_Project/audit_ready_dbt",
     "yaml.schemaStore.enable": false,
