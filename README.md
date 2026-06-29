@@ -8,7 +8,9 @@
 
 A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** transitioning into Analytics Engineering. The goal was to apply financial audit expertise directly to the modern data stack — not just build a pipeline, but embed the internal controls and reconciliation logic that a real audit would require.
 
-* **Data Source**: [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) — a public BigQuery dataset simulating a fashion e-commerce business (~1,000 products, ~100K orders)
+* **Data Sources**:
+  - [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) — a public BigQuery dataset simulating a fashion e-commerce business (~1,000 products, ~100K orders)
+  - Airflow-generated synthetic incremental data — daily orders (~100/day) including partial refund scenarios (15%), injected via `scripts/generate_daily_incremental.py`
 * **Objective**: Transform raw transactional logs into audit-ready financial marts with automated internal controls
 * **Core Value**: Bridge the gap between system logs and GAAP/IFRS standards by embedding reconciliation logic, revenue recognition, and inventory valuation directly into the transformation layer
 
@@ -26,7 +28,7 @@ A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** tran
 I adopted a hybrid architecture to balance development efficiency with production scalability.
 
 ### 1. Ingestion & Synthetic Data Generation
-* **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** files via API.
+* **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
 * **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends ~100 synthetic orders daily — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable.
 * **Local Data Lake**:
     - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
@@ -45,14 +47,14 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Color-Coded Nodes**:
     - ![#27AE60](https://placehold.co/12x12/27AE60/27AE60.png) Raw Sources: BigQuery thelook & Airflow incremental
     - ![#8D6E63](https://placehold.co/12x12/8D6E63/8D6E63.png) Seeds (lookup tables)
-    - ![#2980B9](https://placehold.co/12x12/2980B9/2980B9.png) thelook Staging Layer
-    - ![#F1C40F](https://placehold.co/12x12/F1C40F/F1C40F.png) Incremental Staging Layer
+    - ![#2980B9](https://placehold.co/12x12/2980B9/2980B9.png) Staging Layer - thelookecommerce
+    - ![#F1C40F](https://placehold.co/12x12/F1C40F/F1C40F.png) Staging Layer - Incremental
     - ![#E67E22](https://placehold.co/12x12/E67E22/E67E22.png) Intermediate Layer
     - ![#8E44AD](https://placehold.co/12x12/8E44AD/8E44AD.png) Financial Marts
     - ![#F0B27A](https://placehold.co/12x12/F0B27A/F0B27A.png) Snapshots (scd_products)
     - ![#5DADE2](https://placehold.co/12x12/5DADE2/5DADE2.png) Analyses
     - ![#F1948A](https://placehold.co/12x12/F1948A/F1948A.png) Semantic Models (MetricFlow)
-    - ![#E84393](https://placehold.co/12x12/E84393/E84393.png) MetricFlow Metrics (default dbt color)
+    - ![#E84393](https://placehold.co/12x12/E84393/E84393.png) MetricFlow Metrics
     - ![#1A252F](https://placehold.co/12x12/1A252F/1A252F.png) Utilities
     - ![#E74C3C](https://placehold.co/12x12/E74C3C/E74C3C.png) Automated Data Quality Tests
 
@@ -63,8 +65,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `stg_thelook_ecommerce__products.sql`
     - 📂 `stg_thelook_ecommerce__users.sql`
     - 📂 `stg_thelook_ecommerce__inventory_items.sql`
+    - 📂 `_thelook_ecommerce__sources.yml` — source definitions pointing to `raw_*.parquet`
     - 📂 `_thelook_ecommerce__models.yml` — consolidated model documentation
-    - 📂 `_thelook_ecommerce__sources.yml` — source definitions
 
 * **Staging Layer — Incremental** (`models/staging/incremental/`):
     - 📂 `stg_incremental__order_items.sql`
@@ -73,13 +75,15 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `_incremental__sources.yml` — source definitions pointing to `incr_*.parquet`
     - 📂 `_incremental__models.yml` — consolidated model documentation
 
-* **Intermediate Layer**:
-    - 📂 `models/intermediate/orders/int_order_items_unioned.sql`: UNION ALL of BigQuery-sourced and incremental order items at item grain. Shared base for `int_order_items_aggregated` and `order_item_revenue`.
-    - 📂 `models/intermediate/orders/int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
-    - 📂 `models/intermediate/orders/int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
-    - 📂 `models/intermediate/inventory/int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
-    - 📂 `models/intermediate/orders/_int_orders__models.yml` — consolidated model documentation
-    - 📂 `models/intermediate/inventory/_int_inventory__models.yml` — consolidated model documentation
+* **Intermediate Layer** (`models/intermediate/`):
+  - **Orders** (`orders/`):
+      - 📂 `int_order_items_unioned.sql`: UNION ALL of BigQuery-sourced and incremental order items at item grain. Shared base for `int_order_items_aggregated` and `order_item_revenue`.
+      - 📂 `int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
+      - 📂 `int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
+      - 📂 `_int_orders__models.yml` — consolidated model documentation
+  - **Inventory** (`inventory/`):
+      - 📂 `int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
+      - 📂 `_int_inventory__models.yml` — consolidated model documentation
 
 * **Marts (Audit Layer)** (`models/marts/finance/`):
     - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation.
@@ -93,11 +97,15 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 * **Utilities Layer** (`models/utilities/`):
     - 📂 `metricflow_time_spine.sql` — date spine table required by MetricFlow for time-based metric aggregation
+    - 📂 `_utilities__models.yml` — consolidated model documentation
 
 > **Materialization Strategy**:
 > - **Staging**: `view` — zero storage cost, always reflects the latest source data.
-> - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons: (1) `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times; (2) intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
+> - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons:
+>   1. `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times;
+>   2. intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
 > - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml`. `order_item_revenue` filters on `created_at`, `shipped_at`, and `returned_at` to capture new items, late shipments, and returns. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
+> - **Utilities**: `table` — `metricflow_time_spine` is materialized as a static table since MetricFlow requires a pre-built date spine to perform time-based aggregations.
 
 #### Jinja Macros
 Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain. Documented in 📂 `macros/_macros.yml`.
@@ -333,6 +341,15 @@ audit_ready_dbt:
     dev:
       type: duckdb
       path: dev.duckdb
+    prod:
+      type: bigquery
+      method: service-account
+      project: your-gcp-project-id
+      dataset: audit_ready_dbt
+      keyfile: credentials/google_creds.json
+      threads: 4
+      timeout_seconds: 300
+      location: US
 ```
 
 ### Step 3 — Set up local Python environment
