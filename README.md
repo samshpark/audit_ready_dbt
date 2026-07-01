@@ -154,6 +154,8 @@ LEFT JOIN {{ ref('scd_products') }} scd
     * **Model Schema Tests** (column-level constraints & descriptions):
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__sources.yml`
+        - 📂 `models/staging/incremental/_incremental__models.yml`
+        - 📂 `models/staging/incremental/_incremental__sources.yml`
         - 📂 `models/intermediate/inventory/_int_inventory__models.yml`
         - 📂 `models/intermediate/orders/_int_orders__models.yml`
         - 📂 `models/marts/finance/_finance__models.yml`
