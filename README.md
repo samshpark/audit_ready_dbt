@@ -140,7 +140,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 *DAG list — `dbt_daily_incremental` active and scheduled daily at 09:00 UTC*
 
 ![Airflow DAG Runs](./images/airflow_dag_runs.png)
-*Grid view — all 6 tasks completing successfully across daily runs (Apr–Jun)*
+*Grid view — all 6 tasks completing successfully across daily runs (May–Jun)*
 
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`
