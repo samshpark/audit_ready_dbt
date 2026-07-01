@@ -192,6 +192,7 @@ Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, re
 | `refund_reconciliation` | `refund_reconciliation` | `order` | `order_date` (day) |
 | `inventory_fiscal_report` | `inventory_fiscal_report` | `product` | `fiscal_year_end_date` (year) |
 | `order_item_revenue` | `order_item_revenue` | `order_item` | `created_at` (day) |
+| `audit_materiality` | `audit_materiality_thresholds` | `product_category` | — (dimensional only) |
 
 | Category | Metrics |
 |---|---|
