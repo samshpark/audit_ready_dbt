@@ -277,41 +277,47 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 
 ### 3. Returns & Refund Reconciliation
 * **File**: 📂 `models/marts/finance/refund_reconciliation.sql`
-* **Objective**: Developed a mechanism to **link refund events back to their original `order_id`**, moving away from treating refunds as isolated negative flows to provide a holistic view of the order lifecycle.
+* **Objective**: Aggregates returned item amounts to `order_id` grain, moving away from treating refunds as isolated negative flows to provide a holistic view of the order lifecycle.
 * **Revenue Reversal Integrity**: Ensured accurate **Net Revenue** calculation by accounting for historical reversals, eliminating the risk of overstated top-line metrics.
-* **Audit Trail**: Created a `refund_type` classification and `refund_rate` metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
+* **Audit Trail**: Created a `refund_type` classification (`NO REFUND` / `FULLY REFUNDED` / `PARTIALLY REFUNDED`) and `refund_value_rate` / `refund_count_rate` metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
 
     - **Data Limitation (Acknowledged)**: The thelook_ecommerce BigQuery dataset synchronizes statuses at the order-header level — all items within a single `order_id` share the same status. As a result, **partial refund scenarios are structurally absent from the historical source data**. This is a known limitation of the dataset, not a pipeline issue.
 
     - **Solution — Ongoing Simulation via Airflow** (📂 `scripts/generate_daily_incremental.py`): The daily pipeline generates synthetic orders that include partial refund scenarios (15% probability — one item returned, another completed within the same `order_id`). These flow through a dedicated staging layer (`stg_incremental__*`) and UNION into the intermediate models alongside BigQuery data — ensuring partial refund detection logic is continuously exercised on incoming data.
 
-    - **Logic Verification**: The reconciliation model accurately links refund events back to their original `order_id`, correctly identifying 'PARTIALLY REFUNDED' cases and calculating precise `refund_count_rate` and `refund_value_rate`.
+    - **Logic Verification**: The reconciliation model correctly identifies 'PARTIALLY REFUNDED' cases and calculates precise `refund_count_rate` and `refund_value_rate` at `order_id` grain.
 
 ### 4. Financial Inventory Control & Valuation (Specific Identification)
 * **File**: 📂 `models/marts/finance/inventory_fiscal_report.sql`
 * **Methodology (Specific Identification & Cut-off)**: Implemented item-level cost tracking by following each `inventory_item_id` from inbound receipt to outbound sale — a **Specific Identification** approach that provides a granular audit trail and precise COGS calculation without the pooling assumptions of FIFO/LIFO.
 * **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**.
 * **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` against the **period-end market price** sourced from the `scd_products` Type 2 snapshot (effective as of December 31st of each fiscal year). This ensures the LCM write-down reflects actual year-end market conditions — not the price frozen at inbound receipt — calculating the correct "Allowance for Inventory Valuation" for Balance Sheet reporting.
-* **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into 1/2/3/4-year categories. Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
+* **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into four categories (`<2yr` / `2–3yr` / `3–4yr` / `>4yr`). Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
 * **Audit Materiality by Category**: Joined 📂 `seeds/audit_materiality_thresholds.csv` — a CPA-defined lookup table assigning `risk_tier` (High / Medium / Low) and `materiality_threshold` ($10K / $5K / $2.5K) to each of the 26 product categories — directly into the mart. This exposes category-level audit priority alongside financial metrics, enabling threshold-based exception filtering without hardcoded values.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
 
-#### Model Detail: inventory_fiscal_report
-> Below is the technical documentation of the final audit mart, demonstrating the integration of accounting principles and data engineering.
+#### Model Detail: `inventory_fiscal_report` (Representative Example)
+> The most complex mart in the project — wiring together a snapshot (point-in-time LCM pricing), a macro (fiscal year-end date), a seed (CPA-defined materiality thresholds), and multi-year LAG logic into a single audit-ready model. Used here to illustrate how dbt features and accounting principles converge in practice.
 
+**Metadata & Governance**
+Tags (`financial`, `audit_ready`), access level (`protected`), and model description ensure the model's purpose and governance are transparent for financial stakeholders.
 ![Model Metadata](./images/model_header.png)
-* **Metadata & Governance**: Tags (`audit_ready`) and descriptions ensure the model's purpose is transparent for financial stakeholders.
 
-![Financial Columns](./images/model_columns.png)
-* **Accounting Logic Implementation**: Includes granular fields for NRV, LCM, and a dedicated `audit_check_diff` for automated reconciliation.
+**Accounting Logic Implementation**
+21 columns covering the full inventory lifecycle — B/S metrics (`beginning_inv_value`, `ending_gross_inv_value`, `ending_allowance_lcm`, `ending_net_realizable_value`), P&L metrics (`period_cogs_amount`, `period_revenue`), audit fields (`audit_check_diff`, `risk_tier`, `materiality_threshold`), and financial ratios (`inventory_turnover_ratio`, `gross_profit_margin`).
+![Financial Columns 1](./images/model_columns_1.png)
+![Financial Columns 2](./images/model_columns_2.png)
 
+**Automated Internal Controls**
+7 dbt tests enforcing: `not_null` on `fiscal_year`, `product_id`, `risk_tier`; `accepted_values` on `audit_check_diff` (must be `0`), `inventory_risk_rating` (Healthy / Warning: Slow Moving / Critical: Obsolete / Adjustment Required: NRV < Cost), `risk_tier` (High / Medium / Low); and `unique_combination_of_columns` on `(fiscal_year, product_id)`.
 ![Data Tests](./images/model_data_tests.png)
-* **Automated Internal Controls**: Integrated dbt tests to enforce zero-variance (`audit_check_diff == 0`), composite PK uniqueness `(fiscal_year, product_id)`, and valid inventory health ratings.
 
+**Dependency Graph**
+Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fiscal_year_end` (macro), and `audit_materiality_thresholds` (seed) — all four dbt node types wired into a single model.
+![Depends On Seeds](./images/model_depends_seeds.png)
 ![Depends On Models](./images/model_depends_models.png)
 ![Depends On Snapshots](./images/model_depends_snapshot.png)
 ![Depends On Macros](./images/model_depends_macro.png)
-* **Dependency Graph**: `inventory_fiscal_report` depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), and `fiscal_year_end` (macro) — dbt's model, snapshot, and macro features all wired together in a single financial reporting model.
 
 ---
 
@@ -359,8 +365,9 @@ audit_ready_dbt:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install dbt-duckdb dbt-metricflow google-cloud-bigquery pandas pyarrow
+pip install dbt-duckdb dbt-bigquery dbt-metricflow google-cloud-bigquery pandas pyarrow
 ```
+> `dbt-bigquery` is only required if you intend to run against the BigQuery `prod` target.
 
 ### Step 4 — Set up BigQuery credentials
 - Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts) with **BigQuery Data Viewer** and **BigQuery Job User** roles
@@ -380,11 +387,6 @@ dbt deps
 ### Step 7 — Run the pipeline
 
 From Step 7 onwards, you can either run the pipeline **manually** or let **Airflow** handle it.
-
-> **Note**: `inventory_fiscal_report` is excluded from the Airflow DAG (annual full-refresh model). Run it manually regardless of which option you choose.
-> ```bash
-> dbt run --select inventory_fiscal_report
-> ```
 
 #### Option A — Manual
 ```bash
@@ -408,6 +410,12 @@ Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC da
 
 The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run (incremental) → dbt test` on every run.
 
+> **Note**: `inventory_fiscal_report` is excluded from the Airflow DAG (annual full-refresh model — not suited for daily incremental runs). Run it manually after the DAG completes:
+> ```bash
+> dbt run --select inventory_fiscal_report
+> ```
+
+
 ### Step 8 — Query metrics via Semantic Layer
 ```bash
 # Validate semantic model definitions
@@ -415,3 +423,10 @@ mf validate-configs
 ```
 
 See [Semantic Layer — Example Queries](#10-semantic-layer-metricflow) above for `mf query` usage.
+
+### Step 9 — Browse dbt documentation *(optional)*
+```bash
+dbt docs generate
+dbt docs serve
+```
+Open **http://localhost:8080** to explore model metadata, column descriptions, data tests, and the full dependency graph.
