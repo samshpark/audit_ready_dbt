@@ -9,6 +9,7 @@ Pipeline:
   4. dbt_run_intermediate       — refresh int_order_items_aggregated view
   5. dbt_run_marts              — incremental merge into revenue, order_reconciliation, refund_reconciliation
   6. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
+  7. export_for_tableau         — export mart tables to CSV for Tableau Public
 """
 
 import os
@@ -35,6 +36,13 @@ def run_generate_incremental(**context) -> None:
     from generate_daily_incremental import generate_today_orders
 
     generate_today_orders(project_dir=DBT_PROJECT_DIR, n_orders=100)
+
+
+def run_export_for_tableau(**context) -> None:
+    from export_for_tableau import export_tables
+
+    db_path = os.path.join(DBT_PROJECT_DIR, "dev.duckdb")
+    export_tables(db_path=db_path)
 
 
 default_args = {
@@ -130,6 +138,16 @@ with DAG(
         doc_md="Run dbt tests across all updated models to validate the daily pipeline output.",
     )
 
+    tableau_export = PythonOperator(
+        task_id="export_for_tableau",
+        python_callable=run_export_for_tableau,
+        doc_md=(
+            "Export all five mart tables (revenue, order_reconciliation, refund_reconciliation, "
+            "order_item_revenue, inventory_fiscal_report) to tableau_exports/*.csv "
+            "for use in Tableau Public."
+        ),
+    )
+
     (
         generate_data
         >> dbt_seed
@@ -137,4 +155,5 @@ with DAG(
         >> dbt_run_int
         >> dbt_run_marts
         >> dbt_test
+        >> tableau_export
     )
