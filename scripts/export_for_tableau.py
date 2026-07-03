@@ -20,14 +20,12 @@ import duckdb
 # schema.table — order_item_revenue lives in main_finance (custom dbt schema),
 # the remaining four are materialized in the default main schema.
 MART_TABLES = [
-    ("main", "revenue"),
-    ("main", "order_reconciliation"),
-    ("main", "refund_reconciliation"),
-    ("main", "inventory_fiscal_report"),
+    ("main_finance", "revenue"),
+    ("main_finance", "order_reconciliation"),
+    ("main_finance", "refund_reconciliation"),
+    ("main_finance", "inventory_fiscal_report"),
     ("main_finance", "order_item_revenue"),
 ]
-
-OUTPUT_DIR = "tableau_exports"
 
 
 def export_tables(db_path: str) -> None:
@@ -35,7 +33,8 @@ def export_tables(db_path: str) -> None:
         print(f"[ERROR] Database not found: {db_path}")
         sys.exit(1)
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    output_dir = os.path.join(os.path.dirname(os.path.abspath(db_path)), "tableau_exports")
+    os.makedirs(output_dir, exist_ok=True)
 
     con = duckdb.connect(db_path, read_only=True)
 
@@ -43,12 +42,12 @@ def export_tables(db_path: str) -> None:
     print("=" * 55)
     print("  Tableau Export")
     print(f"  Source : {db_path}")
-    print(f"  Output : {OUTPUT_DIR}/")
+    print(f"  Output : {output_dir}/")
     print("=" * 55)
 
     for schema, table in MART_TABLES:
         df = con.execute(f"SELECT * FROM {schema}.{table}").df()
-        out_path = os.path.join(OUTPUT_DIR, f"{table}.csv")
+        out_path = os.path.join(output_dir, f"{table}.csv")
         df.to_csv(out_path, index=False)
         print(f"  [OK]  {table:<30}  {len(df):>6,} rows  →  {out_path}")
 
