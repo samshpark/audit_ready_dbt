@@ -75,7 +75,7 @@ with DAG(
         task_id="dbt_seed",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt seed --select audit_materiality_thresholds --profiles-dir . --target dev"
+            "dbt seed --select audit_materiality_thresholds --profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
@@ -88,7 +88,7 @@ with DAG(
     dbt_run_snapshot = BashOperator(
         task_id="dbt_run_snapshot",
         bash_command=(
-            "cd $DBT_PROJECT_DIR && dbt snapshot --select scd_products --profiles-dir . --target dev"
+            "cd $DBT_PROJECT_DIR && dbt snapshot --select scd_products --profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
@@ -103,7 +103,7 @@ with DAG(
         task_id="dbt_run_intermediate",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select int_order_items_aggregated --profiles-dir . --target dev"
+            "dbt run --select int_order_items_aggregated --profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
@@ -114,7 +114,7 @@ with DAG(
         task_id="dbt_run_marts",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue --profiles-dir . --target dev"
+            "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue --profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
@@ -131,7 +131,7 @@ with DAG(
             "dbt test --select "
             "stg_incremental__order_items stg_incremental__orders stg_incremental__inventory_items "
             "int_order_items_aggregated revenue order_reconciliation refund_reconciliation order_item_revenue "
-            "--profiles-dir . --target dev"
+            "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
