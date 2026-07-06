@@ -35,7 +35,7 @@ def run_generate_incremental(**context) -> None:
         )
     from generate_daily_incremental import generate_today_orders
 
-    generate_today_orders(project_dir=DBT_PROJECT_DIR, n_orders=100)
+    generate_today_orders(project_dir=DBT_PROJECT_DIR)
 
 
 def run_export_for_tableau(**context) -> None:
@@ -66,8 +66,10 @@ with DAG(
         task_id="generate_incremental_data",
         python_callable=run_generate_incremental,
         doc_md=(
-            "Append ~100 synthetic orders for today to incr_order_items.parquet, "
-            "incr_orders.parquet, and incr_inventory_items.parquet."
+            "Append synthetic orders for today to incr_order_items.parquet, "
+            "incr_orders.parquet, and incr_inventory_items.parquet. Daily count "
+            "starts at ~15 and grows ~5%/month from the BigQuery ingestion cutoff, "
+            "continuing that source's own growth trend instead of flatlining."
         ),
     )
 
@@ -114,7 +116,8 @@ with DAG(
         task_id="dbt_run_marts",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue --profiles-dir . --target dev --no-partial-parse"
+            "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue "
+            "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,

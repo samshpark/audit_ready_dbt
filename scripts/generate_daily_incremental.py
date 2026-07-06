@@ -17,12 +17,26 @@ import os
 import random
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 
+# The BigQuery source is a one-time, immutable snapshot that stops at this
+# date (~15 orders/day at that point). Past it, every order comes from this
+# generator, so its daily count picks up the same organic growth rate the
+# BigQuery history was already showing instead of flatlining forever.
+_ANCHOR_DATE = datetime(2026, 6, 21, tzinfo=timezone.utc)
+_ANCHOR_DAILY_ORDERS = 15
+_MONTHLY_GROWTH_RATE = 0.05
 
-def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
+
+def _growth_adjusted_order_count(today: datetime) -> int:
+    months_elapsed = max(0.0, (today - _ANCHOR_DATE).days / 30)
+    return max(1, round(_ANCHOR_DAILY_ORDERS * (1 + _MONTHLY_GROWTH_RATE) ** months_elapsed))
+
+
+def generate_today_orders(project_dir: str = ".", n_orders: Optional[int] = None) -> None:
     data_dir = os.path.join(project_dir, "data")
     items_path = os.path.join(data_dir, "incr_order_items.parquet")
     orders_path = os.path.join(data_dir, "incr_orders.parquet")
@@ -81,6 +95,47 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
         hour=0, minute=0, second=0, microsecond=0
     )
 
+    if n_orders is None:
+        n_orders = _growth_adjusted_order_count(today)
+
+    # ------------------------------------------------------------------
+    # Backlog resolution: orders written as still-unshipped by a previous
+    # run may since have "shipped" in the days that passed. Roll them
+    # forward here (mutating the loaded frames before today's rows are
+    # appended) so pending orders don't accumulate forever — most clear
+    # within a few days, a residual keeps aging (genuine cut-off risk),
+    # and a small share age out to cancelled.
+    # ------------------------------------------------------------------
+    if not existing_orders.empty and "shipped_at" in existing_orders.columns:
+        backlog_mask = existing_orders["shipped_at"].isna() & (
+            existing_orders["created_at"] < today - timedelta(days=2)
+        )
+        for oid in existing_orders.loc[backlog_mask, "order_id"].tolist():
+            roll = random.random()
+            order_row = existing_orders["order_id"] == oid
+            item_rows = existing_items["order_id"] == oid
+
+            if roll < 0.65:
+                # ships today
+                new_shipped = today + timedelta(hours=random.randint(0, 20))
+                new_delivered = new_shipped + timedelta(hours=random.randint(24, 72))
+                existing_orders.loc[order_row, "shipped_at"] = new_shipped
+                existing_orders.loc[order_row, "delivered_at"] = new_delivered
+                existing_orders.loc[order_row, "status"] = "Complete"
+                existing_items.loc[item_rows, "shipped_at"] = new_shipped
+                existing_items.loc[item_rows, "delivered_at"] = new_delivered
+                existing_items.loc[item_rows, "status"] = "Complete"
+
+                inv_ids = existing_items.loc[item_rows, "inventory_item_id"].tolist()
+                existing_inv.loc[existing_inv["id"].isin(inv_ids), "sold_at"] = new_shipped
+            elif roll < 0.95:
+                # still pending — ages another day, real cut-off risk signal
+                continue
+            else:
+                # aged out past a reasonable backlog window — cancelled
+                existing_orders.loc[order_row, "status"] = "Cancelled"
+                existing_items.loc[item_rows, "status"] = "Cancelled"
+
     new_items_rows = []
     new_orders_rows = []
     new_inv_rows = []
@@ -97,11 +152,29 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
         items_in_order = random.randint(1, 3)
         if order_type == "PARTIALLY REFUNDED":
             items_in_order = max(items_in_order, 2)
-        shipped_at = order_created_at + timedelta(hours=random.randint(24, 48))
-        delivered_at = shipped_at + timedelta(hours=random.randint(24, 72))
+
+        # A share of NO REFUND orders are still genuinely unshipped as of
+        # generation time (order backlog / in-transit), matching the ~30-40%
+        # pending rate seen in the real BigQuery-sourced data. Without this,
+        # every synthetic order ships within 48h, so recognized_revenue trends
+        # toward 100% for any recent window dominated by incremental rows.
+        # The backlog-resolution step above rolls these forward on later runs.
+        is_unshipped = order_type == "NO REFUND" and random.random() < 0.30
+
+        if is_unshipped:
+            shipped_at = None
+            delivered_at = None
+        else:
+            shipped_at = order_created_at + timedelta(hours=random.randint(24, 48))
+            delivered_at = shipped_at + timedelta(hours=random.randint(24, 72))
 
         order_returned_at = None
-        order_status = "Returned" if order_type == "FULLY REFUNDED" else "Complete"
+        if order_type == "FULLY REFUNDED":
+            order_status = "Returned"
+        elif is_unshipped:
+            order_status = "Processing"
+        else:
+            order_status = "Complete"
 
         for j in range(items_in_order):
             item_id = next_item_id
@@ -123,6 +196,8 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
                         hours=random.randint(24, 168)
                     )
                     order_returned_at = returned_at
+            elif is_unshipped:
+                status = "Processing"
             else:
                 status = np.random.choice(["Complete", "Shipped"], p=[0.9, 0.1])
                 if status == "Shipped":
@@ -130,7 +205,9 @@ def generate_today_orders(project_dir: str = ".", n_orders: int = 100) -> None:
 
             # Inbound: item received into warehouse some days before the order
             inv_created_at = order_created_at - timedelta(days=random.randint(7, 60))
-            inv_sold_at = shipped_at if status not in ("Returned", "Shipped") else None
+            inv_sold_at = (
+                shipped_at if status not in ("Returned", "Shipped", "Processing") else None
+            )
 
             # Use '' for missing string attrs to match BigQuery-sourced inventory_items
             # where unknown values are stored as empty strings, not NULLs.
