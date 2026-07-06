@@ -1,0 +1,12 @@
+{
+  "exclude": ["venv", "dbt_packages", "target"],
+  "executionEnvironments": [
+    {
+      "root": "dags",
+      "reportMissingImports": "none",
+      "reportMissingModuleSource": "none",
+      "reportUnusedVariable": "none",
+      "reportUnusedExpression": "none"
+    }
+  ]
+}
