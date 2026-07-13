@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../.vscode/empty-schema.json
 version: 2
 
 models:

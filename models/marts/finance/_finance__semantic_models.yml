@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../../.vscode/empty-schema.json
 semantic_models:
 
   - name: revenue
