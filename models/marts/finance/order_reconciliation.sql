@@ -23,6 +23,8 @@ final as (
         master_item_count,
         subledger_item_count,
         returned_item_count,
+        master_order_status,
+        subledger_order_status,
 
         {# 1. Existence Reconciliation #}
 

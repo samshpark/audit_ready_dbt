@@ -143,6 +143,16 @@ models:
           distinguish a partial refund (some but not all items returned)
           from a genuine status variance in order_status_recon_detail.
 
+      - name: master_order_status
+        description: "Order status from master table (raw_orders.order_status)."
+
+      - name: subledger_order_status
+        description: >-
+          Comma-separated list of distinct line-item statuses from the
+          subledger (e.g. 'complete,returned'). Compared against
+          master_order_status to produce order_status_recon and
+          order_status_recon_detail.
+
       - name: order_reconciliation
         tests:
           - accepted_values:
