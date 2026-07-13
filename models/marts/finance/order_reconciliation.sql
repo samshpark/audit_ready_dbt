@@ -22,6 +22,7 @@ final as (
 
         master_item_count,
         subledger_item_count,
+        returned_item_count,
 
         {# 1. Existence Reconciliation #}
 
@@ -58,7 +59,34 @@ final as (
                         else 'VARIANCE DETECTED'
                     end
             else 'N/A - PREVIOUS ERROR'
-        end as order_status_recon
+        end as order_status_recon,
+
+        {# 4. Order Status Variance Detail #}
+        {# Separates known-benign status divergence from true anomalies. #}
+        {# Mirrors the exclusion logic in #}
+        {# tests/assert_no_variance_in_order_recon.sql so this is queryable #}
+        {# directly instead of only visible as a passing test. #}
+
+        case
+            when master_order_id is not null and subledger_order_id is not null
+                then
+                    case
+                        when
+                            master_order_status = subledger_order_status
+                            then 'INTEGRITY VERIFIED'
+                        when
+                            returned_item_count > 0
+                            and returned_item_count < subledger_item_count
+                            then 'MIXED FULFILLMENT - PARTIAL REFUND'
+                        when
+                            subledger_order_status like '%shipped%'
+                            and subledger_order_status like '%complete%'
+                            and returned_item_count = 0
+                            then 'MIXED FULFILLMENT - PARTIAL SHIPMENT'
+                        else 'VARIANCE DETECTED - UNEXPLAINED'
+                    end
+            else 'N/A - PREVIOUS ERROR'
+        end as order_status_recon_detail
     from int_orders_joined
 )
 

@@ -137,6 +137,12 @@ models:
         description: >-
           Item count from subledger (COUNT of raw_order_items per order).
 
+      - name: returned_item_count
+        description: >-
+          Count of subledger line items with status 'returned'. Used to
+          distinguish a partial refund (some but not all items returned)
+          from a genuine status variance in order_status_recon_detail.
+
       - name: order_reconciliation
         tests:
           - accepted_values:
@@ -167,6 +173,25 @@ models:
           - accepted_values:
               arguments:
                 values: ['INTEGRITY VERIFIED', 'VARIANCE DETECTED', 'N/A - PREVIOUS ERROR']
+
+      - name: order_status_recon_detail
+        description: >-
+          Same comparison as order_status_recon, but splits VARIANCE DETECTED
+          into the two known-benign patterns (partial refund, partial
+          shipment) versus a genuinely unexplained mismatch. Built from the
+          same exclusion logic as assert_no_variance_in_order_recon, exposed
+          as a column so downstream tools (e.g. the Order Reconciliation
+          dashboard tab) don't need to re-derive it.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [
+                  'INTEGRITY VERIFIED',
+                  'MIXED FULFILLMENT - PARTIAL REFUND',
+                  'MIXED FULFILLMENT - PARTIAL SHIPMENT',
+                  'VARIANCE DETECTED - UNEXPLAINED',
+                  'N/A - PREVIOUS ERROR'
+                ]
 
   - name: refund_reconciliation
     description: >
