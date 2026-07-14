@@ -272,6 +272,14 @@ models:
       - name: product_id
         tests:
           - not_null
+      - name: product_category
+        description: "Product category, joined in from stg_thelook_ecommerce__products."
+        tests:
+          - not_null
+      - name: product_brand
+        description: "Product brand, joined in from stg_thelook_ecommerce__products."
+      - name: product_name
+        description: "Product display name, joined in from stg_thelook_ecommerce__products."
       - name: order_item_status
         tests:
           - not_null

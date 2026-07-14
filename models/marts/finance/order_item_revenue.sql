@@ -11,22 +11,30 @@ with order_items as (
     select * from {{ ref('int_order_items_unioned') }}
 ),
 
+products as (
+    select * from {{ ref('stg_thelook_ecommerce__products') }}
+),
+
 final as (
     select
-        order_item_id,
-        order_id,
-        user_id,
-        product_id,
-        order_item_status,
-        sale_price,
+        order_items.order_item_id,
+        order_items.order_id,
+        order_items.user_id,
+        order_items.product_id,
+        products.category as product_category,
+        products.brand as product_brand,
+        products.name as product_name,
+        order_items.order_item_status,
+        order_items.sale_price,
         case
-            when shipped_at is not null then sale_price
+            when order_items.shipped_at is not null then order_items.sale_price
             else 0
         end as recognized_item_revenue,
-        created_at,
-        shipped_at,
-        returned_at
+        order_items.created_at,
+        order_items.shipped_at,
+        order_items.returned_at
     from order_items
+    left join products on order_items.product_id = products.product_id
 )
 
 select * from final
