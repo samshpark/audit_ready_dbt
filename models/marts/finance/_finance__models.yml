@@ -299,6 +299,39 @@ models:
               arguments:
                 expression: ">= 0"
 
+  - name: inventory_sellthrough
+    description: >-
+      One row per physical inventory unit ever received into the warehouse
+      (thelook_ecommerce + incremental sources unioned), independent of any
+      order/fulfillment join. Exists to answer "has this unit ever sold"
+      directly from sold_at, since inventory_fiscal_report's ending_inv_qty
+      is derived through a stricter order-status join and answers a
+      different question (see audit_fulfillment_lead_time_anomalies-style
+      root-cause notes for why the two numbers don't match).
+    columns:
+      - name: inventory_item_id
+        description: "Primary key. One row per physical unit received."
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
+      - name: created_at
+        description: "Timestamp the unit was received into inventory."
+        tests:
+          - not_null
+      - name: sold_at
+        description: "Timestamp the unit sold. Null means never sold as of the data snapshot."
+      - name: is_unsold
+        description: "True when sold_at is null — this unit has never sold."
+        tests:
+          - not_null
+      - name: received_fiscal_year
+        description: "Calendar year extracted from created_at."
+        tests:
+          - not_null
+
   - name: revenue
     description: >-
       Orders and items joined to calculate recognized revenue and audit risks.

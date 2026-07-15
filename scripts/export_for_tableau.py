@@ -25,6 +25,7 @@ MART_TABLES = [
     ("main_finance", "refund_reconciliation"),
     ("main_finance", "inventory_fiscal_report"),
     ("main_finance", "order_item_revenue"),
+    ("main_finance", "inventory_sellthrough"),
 ]
 
 
