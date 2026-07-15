@@ -1,6 +1,35 @@
 version: 2
 
 models:
+  - name: int_inventory_items_unioned
+    description: >
+      Raw inbound inventory receipts (thelook_ecommerce + incremental sources
+      unioned), one row per physical unit received, before any join to
+      outbound/order data. Feeds int_inventory_items_joined and
+      inventory_sellthrough.
+
+    config:
+      tags: ['financial', 'audit_ready']
+
+    columns:
+      - name: inventory_item_id
+        description: "Primary key. One row per physical unit received."
+        tests:
+          - unique
+          - not_null
+
+      - name: product_id
+        tests:
+          - not_null
+
+      - name: created_at
+        description: "Timestamp the unit was received into inventory."
+        tests:
+          - not_null
+
+      - name: sold_at
+        description: "Timestamp the unit sold, from the raw inventory source. Null if never sold."
+
   - name: int_inventory_items_joined
     description: >
       A comprehensive sub-ledger at the individual item level (inventory_item_id).
