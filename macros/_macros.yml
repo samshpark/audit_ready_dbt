@@ -3,14 +3,16 @@ version: 2
 macros:
   - name: fiscal_year_end
     description: >
-      Returns the fiscal year-end date (December 31st) as a DATE type for a given year column.
+      Returns the fiscal year-end date (December 31st) as a DATE type for a given year column,
+      capped at current_date for the year still in progress so in-flight years are evaluated
+      as of today rather than a not-yet-elapsed December 31st.
       Used for period-end inventory valuation and point-in-time SCD joins in inventory_fiscal_report.
     arguments:
       - name: year_col
         type: integer or column reference
         description: >
           The fiscal year value or column expression (e.g., 'y.fiscal_year').
-          Rendered directly into SQL as: CAST(<year_col> || '-12-31' AS DATE).
+          Rendered directly into SQL as: LEAST(CAST(<year_col> || '-12-31' AS DATE), current_date).
 
   - name: datediff_days
     description: >
