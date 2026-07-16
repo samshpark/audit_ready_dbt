@@ -6,8 +6,11 @@ Pipeline:
   1. generate_incremental_data  — append synthetic orders for today to the parquet sources
   2. dbt_seed                   — reload audit_materiality_thresholds lookup table
   3. dbt_run_snapshot           — refresh scd_products SCD Type 2 snapshot
-  4. dbt_run_intermediate       — refresh int_order_items_aggregated view
-  5. dbt_run_marts              — incremental merge into revenue, order_reconciliation, refund_reconciliation
+  4. dbt_run_intermediate       — recreate all five intermediate views (safety net for view
+                                  definitions; views already reflect current data without this)
+  5. dbt_run_marts              — incremental merge into revenue, order_reconciliation,
+                                  refund_reconciliation, order_item_revenue; full-refresh rebuild of
+                                  inventory_fiscal_report, inventory_sellthrough
   6. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
   7. export_for_tableau         — export mart tables to CSV for Tableau Public
 """
@@ -105,11 +108,17 @@ with DAG(
         task_id="dbt_run_intermediate",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt run --select int_order_items_aggregated --profiles-dir . --target dev --no-partial-parse"
+            "dbt run --select int_order_items_unioned int_order_items_aggregated int_orders_joined "
+            "int_inventory_items_joined int_inventory_items_unioned "
+            "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
-        doc_md="Refresh int_order_items_aggregated view (full re-query on each run).",
+        doc_md=(
+            "Recreate all five intermediate views. These are views, not tables, so they already "
+            "reflect current data on every query without this step — it exists only as a safety "
+            "net that keeps view definitions in sync if a model's SQL changes."
+        ),
     )
 
     dbt_run_marts = BashOperator(
@@ -117,13 +126,16 @@ with DAG(
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
             "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue "
+            "inventory_fiscal_report inventory_sellthrough "
             "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
         doc_md=(
             "Incrementally merge updated orders into the four order-level mart models. "
-            "inventory_fiscal_report is excluded — year-level aggregation requires full refresh."
+            "inventory_fiscal_report and inventory_sellthrough are plain table materializations, "
+            "so this fully rebuilds them each run rather than merging — cross-year LAG logic and "
+            "the unit-level sell-through view both need complete recalculation, not a partial merge."
         ),
     )
 
@@ -133,7 +145,10 @@ with DAG(
             "cd $DBT_PROJECT_DIR && "
             "dbt test --select "
             "stg_incremental__order_items stg_incremental__orders stg_incremental__inventory_items "
-            "int_order_items_aggregated revenue order_reconciliation refund_reconciliation order_item_revenue "
+            "int_order_items_unioned int_order_items_aggregated int_orders_joined "
+            "int_inventory_items_joined int_inventory_items_unioned "
+            "revenue order_reconciliation refund_reconciliation order_item_revenue "
+            "inventory_fiscal_report inventory_sellthrough "
             "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
@@ -145,8 +160,8 @@ with DAG(
         task_id="export_for_tableau",
         python_callable=run_export_for_tableau,
         doc_md=(
-            "Export all five mart tables (revenue, order_reconciliation, refund_reconciliation, "
-            "order_item_revenue, inventory_fiscal_report) to tableau_exports/*.csv "
+            "Export all six mart tables (revenue, order_reconciliation, refund_reconciliation, "
+            "order_item_revenue, inventory_fiscal_report, inventory_sellthrough) to tableau_exports/*.csv "
             "for use in Tableau Public."
         ),
     )
