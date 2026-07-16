@@ -9,7 +9,7 @@
 A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** transitioning into Analytics Engineering. The goal was to apply financial audit expertise directly to the modern data stack — not just build a pipeline, but embed the internal controls and reconciliation logic that a real audit would require.
 
 * **Data Sources**:
-  - [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) — a public BigQuery dataset simulating a fashion e-commerce business (~1,000 products, ~100K orders)
+  - [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) — a public BigQuery dataset simulating a fashion e-commerce business. `scripts/ingest_data.py` seeds from 1,000 random products, then pulls every order that touches them (plus each order's other line items) — snowballing via referential integrity to ~5.9K products / ~6.2K orders in the final extract.
   - Airflow-generated synthetic incremental data — daily orders (starting ~15/day and growing ~5%/month, continuing the BigQuery source's own growth trend past its ingestion cutoff) including partial refund scenarios (15%), injected via `scripts/generate_daily_incremental.py`
 * **Objective**: Transform raw transactional logs into audit-ready financial marts with automated internal controls
 * **Core Value**: Bridge the gap between system logs and GAAP/IFRS standards by embedding reconciliation logic, revenue recognition, and inventory valuation directly into the transformation layer
@@ -19,7 +19,7 @@ A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** tran
 ## 2. Tech Stack & Engineering Value
 * **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
 * **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
-* **Cost-Efficiency**: By utilizing a **Python-to-DuckDB** ingestion strategy, reduced warehouse compute costs by **90%** during development.
+* **Cost-Efficiency**: By developing against a **Python-to-DuckDB** local pipeline instead of iterating directly against BigQuery, development-time warehouse compute costs are close to zero — BigQuery is only touched once, at ingestion.
 * **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 
 ---
@@ -29,7 +29,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
-* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends synthetic orders daily — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable. ~30% of orders start as genuinely unshipped (`Processing`) and are rolled forward on later runs (shipped, still pending, or aged out to `cancelled`), so recognized revenue and cut-off risk stay realistic instead of every order shipping within 48 hours.
+* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends synthetic orders daily — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable. ~23% of orders start as genuinely unshipped (`Processing`) and are rolled forward on later runs (shipped, still pending, or aged out to `cancelled`), so recognized revenue and cut-off risk stay realistic instead of every order shipping within 48 hours.
 * **Local Data Lake**:
     - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
     - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py`, then updated automatically by the Airflow pipeline.
@@ -83,14 +83,16 @@ I adopted a hybrid architecture to balance development efficiency with productio
       - 📂 `_int_orders__models.yml` — consolidated model documentation
   - **Inventory** (`inventory/`):
       - 📂 `int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
+      - 📂 `int_inventory_items_unioned.sql`: UNION ALL of raw inventory receipts, one row per unit.
       - 📂 `_int_inventory__models.yml` — consolidated model documentation
 
 * **Marts (Audit Layer)** (`models/marts/finance/`):
-    - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation.
+    - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation, including a status-variance detail column that separates benign patterns (partial refund/shipment) from true anomalies.
     - 📂 `revenue.sql`: Accrual-based revenue recognition with cut-off risk detection.
     - 📂 `refund_reconciliation.sql`: Linking refunds to original orders.
     - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, turnover ratios, and CPA-defined `risk_tier` / `materiality_threshold` per product category.
-    - 📂 `order_item_revenue.sql`: Item-level revenue model (grain: one row per order item). Enables status-level breakdown (`complete` / `returned` / `shipped` etc.) that is not possible at order grain — essential for partial refund scenarios where a single order contains items with different statuses.
+    - 📂 `order_item_revenue.sql`: Item-level revenue model (grain: one row per order item), including product category/brand/name. Enables status-level breakdown (`complete` / `returned` / `shipped` etc.) that is not possible at order grain — essential for partial refund scenarios where a single order contains items with different statuses.
+    - 📂 `inventory_sellthrough.sql`: One row per physical inventory unit received, independent of order fulfillment status — answers "has this unit ever sold" directly.
     - 📂 `_finance__models.yml` — consolidated model documentation
     - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
     - 📂 `_finance__metrics.yml` — business metric definitions
@@ -104,7 +106,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 > - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons:
 >   1. `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times;
 >   2. intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
-> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml`. `order_item_revenue` filters on `created_at`, `shipped_at`, and `returned_at` to capture new items, late shipments, and returns. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run.
+> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a configurable lookback window (`incremental_lookback_days`, default: 1 day) defined in `dbt_project.yml`. `order_item_revenue` filters on `created_at`, `shipped_at`, and `returned_at` to capture new items, late shipments, and returns. `inventory_fiscal_report` is a full-refresh **table** — cross-year LAG calculations require complete recalculation each run. `inventory_sellthrough` is also a plain full-refresh table — a straight pass-through with no incremental logic needed.
 > - **Utilities**: `table` — `metricflow_time_spine` is materialized as a static table since MetricFlow requires a pre-built date spine to perform time-based aggregations.
 
 #### Jinja Macros
@@ -112,7 +114,7 @@ Repeated SQL expressions are extracted into reusable macros to enforce DRY princ
 
 | Macro | Usage | Purpose |
 |---|---|---|
-| `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE` type for period-end valuation and SCD joins |
+| `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE`, capped at `current_date` so the year still in progress is evaluated as of today rather than a not-yet-elapsed December 31st |
 | `datediff_days(start, end)` | `int_inventory_items_joined` (×2) | Calculates day difference between two date columns, used for inventory aging and velocity buckets |
 
 ```sql
@@ -130,17 +132,19 @@ LEFT JOIN {{ ref('scd_products') }} scd
     1. `generate_incremental_data` — Appends ~15 synthetic orders to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
     2. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
     3. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
-    4. `dbt_run_intermediate` — Refreshes intermediate views (full re-query on each run)
-    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue`
+    4. `dbt_run_intermediate` — Recreates all five intermediate views. Views already reflect current data on every query (no dbt run needed for freshness) — this step is a safety net that keeps view definitions in sync if a model's SQL changes.
+    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue`; full-refresh rebuild of `inventory_fiscal_report` and `inventory_sellthrough` (plain table materializations — cross-year LAG logic and the unit-level sell-through view both need complete recalculation, not a partial merge)
     6. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
-    7. `export_for_tableau` — Exports all five mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
+    7. `export_for_tableau` — Exports all six mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
 
 > **Note**: All 7 steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap.
 
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
+
 *DAG list — `dbt_daily_incremental` active and scheduled daily at 09:00 UTC*
 
 ![Airflow DAG Runs](./images/airflow_dag_runs.png)
+
 *Grid view — all 7 tasks completing successfully across daily runs (May–Jun)*
 
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
@@ -152,6 +156,8 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 6. Quality Control
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
 ![dbt Test Results](./images/test_results.png)
+> The one `WARN` above is `assert_fulfillment_lead_time_within_baseline` — expected, not a failure. It's a warn-severity test that flags when the negative-lead-time rate (a known source-data defect, see below) rises well past its historical baseline. It's designed to warn rather than block the build, since the underlying defect can't be fixed at the transform layer.
+
     * **Model Schema Tests** (column-level constraints & descriptions):
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__sources.yml`
@@ -160,15 +166,19 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `models/intermediate/inventory/_int_inventory__models.yml`
         - 📂 `models/intermediate/orders/_int_orders__models.yml`
         - 📂 `models/marts/finance/_finance__models.yml`
+    
     * **Custom Assertion Tests** (business-logic validation):
         - 📂 `tests/assert_order_reconciliation_is_successful.sql`
         - 📂 `tests/assert_no_variance_in_order_recon.sql`
         - 📂 `tests/assert_revenue_recognition_logic.sql`
+        - 📂 `tests/assert_fulfillment_lead_time_within_baseline.sql` — warns if the negative-lead-time rate rises well past its historical baseline
+    
     * **Audit Exception Analyses** (`analyses/`) — ad-hoc audit queries compiled via `dbt compile`, using `{{ ref() }}` for table references. Copy the rendered SQL from `target/compiled/` to run directly against DuckDB:
         - 📂 `audit_inventory_exceptions.sql` — flags inventory equation imbalances (`audit_check_diff ≠ 0`), LCM write-down candidates, and slow-moving/obsolete stock
         - 📂 `audit_revenue_cutoff_risk.sql` — surfaces cut-off risk orders (created in one month, shipped in another) and pending shipments with unrecognized revenue
         - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
         - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
+        - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
 * **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`.
 
 ### 7. SQL Code Quality (SQLFluff)
@@ -272,7 +282,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **File**: 📂 `models/marts/finance/revenue.sql`
 * **Objective**: Implemented **Accrual Basis** accounting standards by designating `shipped_at` (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** principles.
 * **Complex Order State Management**:
-    - Utilized `STRING_AGG(DISTINCT status)` to synchronize and monitor multiple item statuses within a single `order_id`.
+    - Utilized `STRING_AGG(DISTINCT status)` (via `int_order_items_aggregated`, which `revenue.sql` builds on) to synchronize and monitor multiple item statuses within a single `order_id`.
     - Applied **COALESCE logic** to prevent data loss across the Full-Join between Master and Sub-ledger, maintaining a Single Source of Truth (SSOT).
 * **Temporal Analysis & Cut-off Control**:
     - Engineered logic to analyze the time-lag between **Order Creation (`created_at`)** and **Fulfillment (`shipped_at`)**.
@@ -298,6 +308,7 @@ This project moves beyond simple ETL by embedding **Accounting Principles** into
 * **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into four categories (`<2yr` / `2–3yr` / `3–4yr` / `>4yr`). Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
 * **Audit Materiality by Category**: Joined 📂 `seeds/audit_materiality_thresholds.csv` — a CPA-defined lookup table assigning `risk_tier` (High / Medium / Low) and `materiality_threshold` ($10K / $5K / $2.5K) to each of the 26 product categories — directly into the mart. This exposes category-level audit priority alongside financial metrics, enabling threshold-based exception filtering without hardcoded values.
 * **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
+* **Unit-Level Sell-Through** (📂 `models/marts/finance/inventory_sellthrough.sql`): A separate, unaggregated mart — one row per physical unit received — built to answer a question `inventory_fiscal_report` can't: has this specific unit ever sold? Surfaced a real audit finding: 63% of units ever received have no sale event at all, including units received back in 2020 and still on hand today.
 
 #### Model Detail: `inventory_fiscal_report` (Representative Example)
 > The most complex mart in the project — wiring together a snapshot (point-in-time LCM pricing), a macro (fiscal year-end date), a seed (CPA-defined materiality thresholds), and multi-year LAG logic into a single audit-ready model. Used here to illustrate how dbt features and accounting principles converge in practice.
@@ -311,9 +322,13 @@ Tags (`financial`, `audit_ready`), access level (`protected`), and model descrip
 ![Financial Columns 1](./images/model_columns_1.png)
 ![Financial Columns 2](./images/model_columns_2.png)
 
-**Automated Internal Controls**
+**Automated Internal Controls & Downstream Usage**
 7 dbt tests enforcing: `not_null` on `fiscal_year`, `product_id`, `risk_tier`; `accepted_values` on `audit_check_diff` (must be `0`), `inventory_risk_rating` (Healthy / Warning: Slow Moving / Critical: Obsolete / Adjustment Required: NRV < Cost), `risk_tier` (High / Medium / Low); and `unique_combination_of_columns` on `(fiscal_year, product_id)`.
 ![Data Tests](./images/model_data_tests.png)
+
+Referenced downstream by `audit_inventory_exceptions.sql` (ad-hoc audit analysis) and the `inventory_fiscal_report` semantic model (MetricFlow) — the same tested mart feeds both the audit drill-down and governed metric definitions.
+![Analyses](./images/model_data_analyses.png)
+![Semantic Models](./images/model_data_semantic_models.png)
 
 **Dependency Graph**
 Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fiscal_year_end` (macro), and `audit_materiality_thresholds` (seed) — all four dbt node types wired into a single model.
@@ -322,17 +337,26 @@ Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fis
 ![Depends On Snapshots](./images/model_depends_snapshot.png)
 ![Depends On Macros](./images/model_depends_macro.png)
 
+### 5. Dashboard Showcase
+A 4-tab Tableau workbook (`tableau_workbook/audit_ready_dbt_dashboard (desktop) .twb`, packaged as `(server).twbx`) consuming the CSV exports above — one tab per mart, each pairing KPI tiles with an audit-oriented drill-down, putting the accounting logic above into an actual audit view.
+
+**[▶ View live on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)**
+
+**① Revenue** — Gross vs. recognized revenue by month, with automated Potential Cut-off Risk detection when `shipped_at` falls in a different fiscal period than `created_at`.
+![Revenue Dashboard](./images/tableau_dashboard_revenue.png)
+
+**② Order Reconciliation** — Master-to-subledger status at a glance, splitting genuine reconciliation failures from benign variance patterns (partial refunds, mixed shipments) so only true exceptions surface.
+![Order Reconciliation Dashboard](./images/tableau_dashboard_order_reconciliation.png)
+
+**③ Refund & Returns** — Refund rate trend, product return rate by category, and a fulfillment lead-time integrity check that flags `shipped_at` timestamps recorded earlier than `created_at` — a defect traced back to the raw source data, monitored via a warn-severity dbt test rather than silently patched.
+![Refund & Returns Dashboard](./images/tableau_dashboard_refund_returns.png)
+
+**④ Inventory** — LCM write-down and materiality-breach controls (both structurally clean), set against an Avg Days on Hand trend that's risen every year since FY2022 with no reversal — the real exposure is slow-moving stock, not mis-valued stock.
+![Inventory Dashboard](./images/tableau_dashboard_inventory.png)
+
 ---
 
-## 5. Roadmap
-The following features are planned for future development:
-
-* **Dynamic Financial Dashboards:** Tableau Public dashboard consuming mart CSV exports (`tableau_exports/*.csv`), visualizing revenue recognition, refund trends, and inventory health.
-* **Anomaly Detection**: Automated notifications for significant financial anomalies (e.g., sudden spikes in return rates).
-
----
-
-## 6. Getting Started
+## 5. Getting Started
 
 **Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
 
@@ -412,13 +436,7 @@ docker ps
 Open **http://localhost:8080** and log in with `admin` / `admin`.
 Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC daily, or trigger it manually from the UI.
 
-The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run (incremental) → dbt test → export_for_tableau` on every run.
-
-> **Note**: `inventory_fiscal_report` is excluded from the Airflow DAG (annual full-refresh model — not suited for daily incremental runs). Run it manually after the DAG completes:
-> ```bash
-> dbt run --select inventory_fiscal_report
-> ```
-
+The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run intermediate → dbt run marts → dbt test → export_for_tableau` on every run.
 
 ### Step 8 — Query metrics via Semantic Layer
 ```bash
