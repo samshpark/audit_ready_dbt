@@ -128,7 +128,10 @@ semantic_models:
     dimensions:
       - name: fiscal_year_end_date
         type: time
-        expr: "CAST(CAST(fiscal_year AS VARCHAR) || '-12-31' AS DATE)"
+        # Mirrors macros/fiscal_year_end.sql — can't call the macro directly here
+        # (semantic model expr isn't rendered in a Jinja context with project macros
+        # in scope), so the LEAST(..., current_date) cap is duplicated inline.
+        expr: "LEAST(CAST(CAST(fiscal_year AS VARCHAR) || '-12-31' AS DATE), current_date)"
         type_params:
           time_granularity: year
       - name: fiscal_year
