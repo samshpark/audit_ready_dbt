@@ -2732,7 +2732,7 @@
       <column-instance column='[Calculation_6458416915595277]' derivation='User' name='[usr:Calculation_6458416915595277:qk]' pivot='key' type='quantitative' />
       <column-instance column='[Calculation_6458417016889368]' derivation='User' name='[usr:Calculation_6458417016889368:nk]' pivot='key' type='nominal' />
       <extract count='-1' enabled='true' object-id='' units='records' user-specific='false'>
-        <connection access_mode='readonly' authentication='auth-none' author-locale='en_US' class='hyper' dbname='/var/folders/0q/9_4g4k5x4356wvh9mwp7vqh80000gn/T/tableau-temp/#TableauTemp_1h7fz2902e1pmv18fyjv70hq0kv8.hyper' default-settings='yes' schema='Extract' sslmode='' update-time='07/16/2026 04:15:47 AM' username='tableau_internal_user'>
+        <connection access_mode='readonly' authentication='auth-none' author-locale='en_US' class='hyper' dbname='/var/folders/0q/9_4g4k5x4356wvh9mwp7vqh80000gn/T/tableau-temp/#TableauTemp_1h7fz2902e1pmv18fyjv70hq0kv8.hyper' default-settings='yes' schema='Extract' sslmode='' update-time='07/16/2026 06:04:54 AM' username='tableau_internal_user'>
           <relation type='collection'>
             <relation name='refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F' table='[Extract].[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]' type='table' />
             <relation name='order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5' table='[Extract].[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]' type='table' />
@@ -2764,7 +2764,7 @@
             <map key='[user_id]' value='[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F].[user_id]' />
           </cols>
           <refresh>
-            <refresh-event add-from-file-path='refund_reconciliation &amp; order_item_revenue' increment-value='%null%' refresh-type='create' rows-inserted='36665' timestamp-start='2026-07-16 04:15:47.269' />
+            <refresh-event add-from-file-path='refund_reconciliation &amp; order_item_revenue' increment-value='%null%' refresh-type='create' rows-inserted='36711' timestamp-start='2026-07-16 06:04:54.727' />
           </refresh>
           <metadata-records>
             <metadata-record class='column'>
@@ -2777,7 +2777,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>12337</approx-count>
+              <approx-count>12353</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2791,7 +2791,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>4505</approx-count>
+              <approx-count>4321</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2805,7 +2805,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>date</local-type>
               <aggregation>Year</aggregation>
-              <approx-count>1473</approx-count>
+              <approx-count>1477</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2819,7 +2819,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>1952</approx-count>
+              <approx-count>1799</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2833,7 +2833,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>504</approx-count>
+              <approx-count>607</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2875,7 +2875,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>1904</approx-count>
+              <approx-count>1736</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2889,7 +2889,7 @@
               <family>refund_reconciliation.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>800</approx-count>
+              <approx-count>746</approx-count>
               <contains-null>true</contains-null>
               <object-id>[refund_reconciliation.csv_3C3993B4A334491B8CCF0BACC7B6861F]</object-id>
             </metadata-record>
@@ -2932,7 +2932,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>24328</approx-count>
+              <approx-count>24358</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -2946,7 +2946,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>8959</approx-count>
+              <approx-count>9476</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -2960,7 +2960,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>5963</approx-count>
+              <approx-count>5976</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -2974,7 +2974,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>integer</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>5707</approx-count>
+              <approx-count>5886</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -2988,7 +2988,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>string</local-type>
               <aggregation>Count</aggregation>
-              <approx-count>29</approx-count>
+              <approx-count>26</approx-count>
               <contains-null>true</contains-null>
               <collation flag='0' name='LEN_RUS' />
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
@@ -3003,7 +3003,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>string</local-type>
               <aggregation>Count</aggregation>
-              <approx-count>1551</approx-count>
+              <approx-count>1671</approx-count>
               <contains-null>true</contains-null>
               <collation flag='0' name='LEN_RUS' />
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
@@ -3018,7 +3018,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>string</local-type>
               <aggregation>Count</aggregation>
-              <approx-count>5662</approx-count>
+              <approx-count>5886</approx-count>
               <contains-null>true</contains-null>
               <collation flag='0' name='LEN_RUS' />
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
@@ -3048,7 +3048,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>1095</approx-count>
+              <approx-count>1066</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -3062,7 +3062,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>real</local-type>
               <aggregation>Sum</aggregation>
-              <approx-count>881</approx-count>
+              <approx-count>840</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -3076,7 +3076,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>datetime</local-type>
               <aggregation>Year</aggregation>
-              <approx-count>12235</approx-count>
+              <approx-count>11956</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -3090,7 +3090,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>datetime</local-type>
               <aggregation>Year</aggregation>
-              <approx-count>8466</approx-count>
+              <approx-count>8190</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -3104,7 +3104,7 @@
               <family>order_item_revenue.csv</family>
               <local-type>datetime</local-type>
               <aggregation>Year</aggregation>
-              <approx-count>5289</approx-count>
+              <approx-count>5150</approx-count>
               <contains-null>true</contains-null>
               <object-id>[order_item_revenue.csv_AE0FAC6F3B944FB8A76A39D72D7908C5]</object-id>
             </metadata-record>
@@ -8727,8 +8727,8 @@
         <devicelayout auto-generated='true' name='Phone'>
           <size maxheight='1700' minheight='1700' sizing-mode='vscroll' />
           <zones>
-            <zone h='100000' id='97' type-v2='layout-basic' w='100000' x='0' y='0'>
-              <zone h='98000' id='96' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
+            <zone h='100000' id='101' type-v2='layout-basic' w='100000' x='0' y='0'>
+              <zone h='98000' id='100' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
                 <zone fixed-size='69' h='9625' id='8' is-fixed='true' name='Inventory- Title' w='60000' x='333' y='500'>
                   <layout-cache cell-count-h='1' non-cell-size-h='48' type-h='cell' type-w='cell' />
                   <zone-style>
@@ -8782,7 +8782,7 @@
                   </zone-style>
                 </zone>
                 <zone fixed-size='122' h='16250' id='48' is-fixed='true' name='AUDIT CONTROL' show-caption='true' w='51084' x='48583' y='11250'>
-                  <layout-cache cell-count-h='1' cell-count-w='1' non-cell-size-h='77' type-h='cell' type-w='cell' />
+                  <layout-cache cell-count-h='1' non-cell-size-h='77' type-h='cell' type-w='cell' />
                   <zone-style>
                     <format attr='border-color' value='#000000' />
                     <format attr='border-style' value='none' />
@@ -8849,7 +8849,7 @@
                   </zone-style>
                 </zone>
                 <zone fixed-size='280' h='40995' id='80' is-fixed='true' name='Inventory Value at Risk, by Category' w='49584' x='333' y='58500'>
-                  <layout-cache cell-count-h='10' minwidth='260' non-cell-size-h='37' type-h='cell' type-w='scalable' />
+                  <layout-cache minwidth='260' type-h='cell' type-w='scalable' />
                   <zone-style>
                     <format attr='border-color' value='#000000' />
                     <format attr='border-style' value='none' />
@@ -8859,7 +8859,7 @@
                   </zone-style>
                 </zone>
                 <zone fixed-size='280' h='40995' id='83' is-fixed='true' name='Highest-Value Obsolete SKUs' w='49667' x='50000' y='58500'>
-                  <layout-cache cell-count-h='10' non-cell-size-h='57' type-h='cell' type-w='cell' />
+                  <layout-cache type-h='cell' type-w='cell' />
                   <zone-style>
                     <format attr='border-color' value='#000000' />
                     <format attr='border-style' value='none' />
@@ -9197,8 +9197,8 @@
         <devicelayout auto-generated='true' name='Phone'>
           <size maxheight='1450' minheight='1450' sizing-mode='vscroll' />
           <zones>
-            <zone h='100000' id='279' type-v2='layout-basic' w='100000' x='0' y='0'>
-              <zone h='98000' id='278' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
+            <zone h='100000' id='283' type-v2='layout-basic' w='100000' x='0' y='0'>
+              <zone h='98000' id='282' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
                 <zone fixed-size='360' h='8250' id='77' name='Title - Order Recon' param='[federated.0g35shz0raashl1203xlz1u186fr].[none:order_at:qk]' type-v2='filter' values='database' w='30667' x='52500' y='1500'>
                   <zone-style>
                     <format attr='border-color' value='#000000' />
@@ -9676,8 +9676,8 @@
         <devicelayout auto-generated='true' name='Phone'>
           <size maxheight='1700' minheight='1700' sizing-mode='vscroll' />
           <zones>
-            <zone h='100000' id='194' type-v2='layout-basic' w='100000' x='0' y='0'>
-              <zone h='98000' id='193' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
+            <zone h='100000' id='198' type-v2='layout-basic' w='100000' x='0' y='0'>
+              <zone h='98000' id='197' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
                 <zone h='8500' id='8' name='Title - Refund' param='[federated.0yttnfr1pupr29195vfvt1yin546].[none:order_date:qk]' type-v2='filter' values='database' w='30334' x='52833' y='500'>
                   <zone-style>
                     <format attr='border-color' value='#000000' />
@@ -10110,8 +10110,8 @@
         <devicelayout auto-generated='true' name='Phone'>
           <size maxheight='1800' minheight='1800' sizing-mode='vscroll' />
           <zones>
-            <zone h='100000' id='455' type-v2='layout-basic' w='100000' x='0' y='0'>
-              <zone h='98000' id='454' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
+            <zone h='100000' id='459' type-v2='layout-basic' w='100000' x='0' y='0'>
+              <zone h='98000' id='458' param='vert' type-v2='layout-flow' w='98666' x='667' y='1000'>
                 <zone fixed-size='59' h='8375' id='44' is-fixed='true' name='Title' w='52834' x='333' y='500'>
                   <layout-cache cell-count-h='1' non-cell-size-h='48' type-h='cell' type-w='cell' />
                   <zone-style>
@@ -10467,7 +10467,7 @@
           <zoom type='entire-view' />
         </viewpoint>
       </viewpoints>
-      <active id='-1' />
+      <active id='36' />
       <simple-id uuid='{1F1AC57C-17B7-4B94-9667-92195CDA14F9}' />
     </window>
     <window class='worksheet' hidden='true' name='AUDIT CONTROL'>
