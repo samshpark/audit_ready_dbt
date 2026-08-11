@@ -50,7 +50,8 @@ models:
         node_color: "#1A252F"
 
 vars:
-  incremental_lookback_days: 1
+  # Covers observed refund/return lag (p99 ~11 days, max 12 days) plus a safety margin.
+  incremental_lookback_days: 14
 
 snapshots:
   audit_ready_dbt:

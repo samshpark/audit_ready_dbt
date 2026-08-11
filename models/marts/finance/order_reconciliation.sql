@@ -104,5 +104,8 @@ select * from final
             or int_orders_joined.last_refund_at
             >= current_timestamp
             - interval '{{ var("incremental_lookback_days") }} days'
+            or int_orders_joined.shipped_at
+            >= current_timestamp
+            - interval '{{ var("incremental_lookback_days") }} days'
     )
 {% endif %}
