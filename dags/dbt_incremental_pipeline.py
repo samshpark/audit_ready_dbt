@@ -9,8 +9,10 @@ Pipeline:
   4. dbt_run_intermediate       — recreate all five intermediate views (safety net for view
                                   definitions; views already reflect current data without this)
   5. dbt_run_marts              — incremental merge into revenue, order_reconciliation,
-                                  refund_reconciliation, order_item_revenue; full-refresh rebuild of
-                                  inventory_fiscal_report, inventory_sellthrough
+                                  refund_reconciliation, order_item_revenue (full-refresh instead on
+                                  Sundays, to catch backdated corrections the lookback window can't
+                                  see); full-refresh rebuild of inventory_fiscal_report,
+                                  inventory_sellthrough
   6. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
   7. export_for_tableau         — export mart tables to CSV for Tableau Public
 """
@@ -127,6 +129,7 @@ with DAG(
             "cd $DBT_PROJECT_DIR && "
             "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue "
             "inventory_fiscal_report inventory_sellthrough "
+            "{% if dag_run.logical_date.weekday() == 6 %}--full-refresh{% endif %} "
             "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
@@ -135,7 +138,11 @@ with DAG(
             "Incrementally merge updated orders into the four order-level mart models. "
             "inventory_fiscal_report and inventory_sellthrough are plain table materializations, "
             "so this fully rebuilds them each run rather than merging — cross-year LAG logic and "
-            "the unit-level sell-through view both need complete recalculation, not a partial merge."
+            "the unit-level sell-through view both need complete recalculation, not a partial merge.\n\n"
+            "On Sundays, `--full-refresh` is added so the four incremental models rebuild from "
+            "scratch too — the lookback window only re-scans recent business timestamps (14 days), so a "
+            "backdated correction older than the window (e.g. a late data-entry fix to an order "
+            "from months ago) would otherwise never get picked back up by the merge."
         ),
     )
 
@@ -166,12 +173,4 @@ with DAG(
         ),
     )
 
-    (
-        generate_data
-        >> dbt_seed
-        >> dbt_run_snapshot
-        >> dbt_run_int
-        >> dbt_run_marts
-        >> dbt_test
-        >> tableau_export
-    )
+    (generate_data >> dbt_seed >> dbt_run_snapshot >> dbt_run_int >> dbt_run_marts >> dbt_test >> tableau_export)
