@@ -106,9 +106,9 @@ models:
               arguments:
                 expression: ">= 0"
                 description: "Returned item count cannot be negative."
-          - dbt_utils.expression_is_true:
-              arguments:
-                expression: "<= subledger_item_count"
+          - not_exceeding:
+              other_column: subledger_item_count
+              config:
                 description: >-
                   Returned items cannot exceed total items in the order.
 
@@ -122,9 +122,9 @@ models:
               arguments:
                 expression: ">= 0"
                 description: "Refund amount cannot be negative."
-          - dbt_utils.expression_is_true:
-              arguments:
-                expression: "<= total_order_amount"
+          - not_exceeding:
+              other_column: total_order_amount
+              config:
                 description: >-
                   Refund amount cannot exceed the gross order total.
 

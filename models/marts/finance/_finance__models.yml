@@ -209,10 +209,11 @@ models:
       to ensure Net Revenue integrity and identify partial refund patterns.
 
     tests:
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "refund_amount <= gross_revenue"
-            name: assert_refund_not_exceeding_revenue
+      - not_exceeding:
+          column_name: refund_amount
+          other_column: gross_revenue
+          name: assert_refund_not_exceeding_revenue
+          config:
             description: >-
               Refund cannot exceed the original transaction value (Audit
               Control).
