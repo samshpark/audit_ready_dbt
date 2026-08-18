@@ -182,7 +182,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
         - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
         - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
-* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`.
+* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build.
 
 ### 7. SQL Code Quality (SQLFluff)
 * **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
