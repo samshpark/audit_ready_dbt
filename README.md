@@ -132,14 +132,15 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**:
     1. `generate_incremental_data` — Appends ~15 synthetic orders to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
-    2. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
-    3. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
-    4. `dbt_run_intermediate` — Recreates all five intermediate views. Views already reflect current data on every query (no dbt run needed for freshness) — this step is a safety net that keeps view definitions in sync if a model's SQL changes.
-    5. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue` (full-refresh instead on Sundays, to catch backdated corrections the lookback window can't see); full-refresh rebuild of `inventory_fiscal_report` and `inventory_sellthrough` (plain table materializations — cross-year LAG logic and the unit-level sell-through view both need complete recalculation, not a partial merge)
-    6. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
-    7. `export_for_tableau` — Exports all six mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
+    2. `dbt_source_freshness` — Checks `incr_orders` / `incr_order_items` freshness (warn after 30h, error after 54h, sized to the daily cadence). Placed right after the step that just wrote today's data, so it always passes when the DAG runs at all — it demonstrates the mechanism rather than catching a real failure mode, since the one failure that matters here (the host machine being off) leaves nothing running to report it. See the task's `doc_md` for the full caveat.
+    3. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
+    4. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
+    5. `dbt_run_intermediate` — Recreates all five intermediate views. Views already reflect current data on every query (no dbt run needed for freshness) — this step is a safety net that keeps view definitions in sync if a model's SQL changes.
+    6. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue` (full-refresh instead on Sundays, to catch backdated corrections the lookback window can't see); full-refresh rebuild of `inventory_fiscal_report` and `inventory_sellthrough` (plain table materializations — cross-year LAG logic and the unit-level sell-through view both need complete recalculation, not a partial merge)
+    7. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
+    8. `export_for_tableau` — Exports all six mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
 
-> **Note**: All 7 steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap.
+> **Note**: All 8 steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap.
 
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
 
@@ -147,7 +148,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 
 ![Airflow DAG Runs](./images/airflow_dag_runs.png)
 
-*Grid view — all 7 tasks completing successfully across daily runs (May–Jun)*
+*Grid view — all 8 tasks completing successfully across daily runs*
 
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`

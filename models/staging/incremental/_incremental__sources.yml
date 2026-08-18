@@ -16,6 +16,10 @@ sources:
           refund scenarios.
         meta:
           external_location: "data/{name}.parquet"
+        loaded_at_field: created_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 54, period: hour}
 
       - name: incr_orders
         description: >-
@@ -23,6 +27,10 @@ sources:
           incr_order_items.
         meta:
           external_location: "data/{name}.parquet"
+        loaded_at_field: created_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 54, period: hour}
 
       - name: incr_inventory_items
         description: >-
@@ -30,3 +38,7 @@ sources:
           incr_order_items.
         meta:
           external_location: "data/{name}.parquet"
+        # No freshness check: created_at here is inbound date, backdated up to
+        # 60 days before the linked order (see generate_daily_incremental.py) —
+        # it reflects a business event, not load time, so it would always
+        # read as "stale" and can't signal whether today's run happened.

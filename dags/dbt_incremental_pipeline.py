@@ -4,17 +4,20 @@ Schedule: 09:00 UTC daily
 
 Pipeline:
   1. generate_incremental_data  — append synthetic orders for today to the parquet sources
-  2. dbt_seed                   — reload audit_materiality_thresholds lookup table
-  3. dbt_run_snapshot           — refresh scd_products SCD Type 2 snapshot
-  4. dbt_run_intermediate       — recreate all five intermediate views (safety net for view
+  2. dbt_source_freshness       — check incr_* source freshness (see caveat on the task below —
+                                  this always passes here, since it runs right after the step
+                                  that just wrote today's data)
+  3. dbt_seed                   — reload audit_materiality_thresholds lookup table
+  4. dbt_run_snapshot           — refresh scd_products SCD Type 2 snapshot
+  5. dbt_run_intermediate       — recreate all five intermediate views (safety net for view
                                   definitions; views already reflect current data without this)
-  5. dbt_run_marts              — incremental merge into revenue, order_reconciliation,
+  6. dbt_run_marts              — incremental merge into revenue, order_reconciliation,
                                   refund_reconciliation, order_item_revenue (full-refresh instead on
                                   Sundays, to catch backdated corrections the lookback window can't
                                   see); full-refresh rebuild of inventory_fiscal_report,
                                   inventory_sellthrough
-  6. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
-  7. export_for_tableau         — export mart tables to CSV for Tableau Public
+  7. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
+  8. export_for_tableau         — export mart tables to CSV for Tableau Public
 """
 
 import os
@@ -75,6 +78,26 @@ with DAG(
             "incr_orders.parquet, and incr_inventory_items.parquet. Daily count "
             "starts at ~15 and grows ~5%/month from the BigQuery ingestion cutoff, "
             "continuing that source's own growth trend instead of flatlining."
+        ),
+    )
+
+    dbt_source_freshness = BashOperator(
+        task_id="dbt_source_freshness",
+        bash_command=(
+            "cd $DBT_PROJECT_DIR && "
+            "dbt source freshness --select source:incremental --profiles-dir . --target dev --no-partial-parse"
+        ),
+        env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
+        append_env=True,
+        doc_md=(
+            "Check incr_orders / incr_order_items freshness (warn_after: 30h, error_after: 54h, "
+            "sized to the daily 09:00 UTC cadence). Caveat: placed right after "
+            "generate_incremental_data, this only ever checks data that step just wrote, so it "
+            "passes trivially whenever the DAG runs at all — it can't detect the actual failure "
+            "mode that matters here (the scheduler not running because the host machine is off), "
+            "since nothing runs to report that. Kept as a demonstration of the mechanism, not a "
+            "real freshness SLA — that would require always-on infrastructure this local Airflow "
+            "instance doesn't have."
         ),
     )
 
@@ -173,4 +196,13 @@ with DAG(
         ),
     )
 
-    (generate_data >> dbt_seed >> dbt_run_snapshot >> dbt_run_int >> dbt_run_marts >> dbt_test >> tableau_export)
+    (
+        generate_data
+        >> dbt_source_freshness
+        >> dbt_seed
+        >> dbt_run_snapshot
+        >> dbt_run_int
+        >> dbt_run_marts
+        >> dbt_test
+        >> tableau_export
+    )
