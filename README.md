@@ -56,7 +56,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - ![#F1948A](https://placehold.co/12x12/F1948A/F1948A.png) Semantic Models (MetricFlow)
     - ![#E84393](https://placehold.co/12x12/E84393/E84393.png) MetricFlow Metrics
     - ![#1A252F](https://placehold.co/12x12/1A252F/1A252F.png) Utilities
-    - ![#E74C3C](https://placehold.co/12x12/E74C3C/E74C3C.png) Automated Data Quality Tests
+    - ![#E74C3C](https://placehold.co/12x12/E74C3C/E74C3C.png) Automated Data Quality Tests (Singular Tests)
+    - ![#ED7255](https://placehold.co/12x12/ED7255/ED7255.png) Exposures (Tableau dashboards)
 
 #### Model Directory
 * **Staging Layer** (`models/staging/thelook_ecommerce/`):
@@ -96,6 +97,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `_finance__models.yml` — consolidated model documentation
     - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
     - 📂 `_finance__metrics.yml` — business metric definitions
+    - 📂 `_finance__exposures.yml` — downstream Tableau dashboard declarations (owner, dependencies)
 
 * **Utilities Layer** (`models/utilities/`):
     - 📂 `metricflow_time_spine.sql` — date spine table required by MetricFlow for time-based metric aggregation
@@ -326,9 +328,10 @@ Tags (`financial`, `audit_ready`), access level (`protected`), and model descrip
 7 dbt tests enforcing: `not_null` on `fiscal_year`, `product_id`, `risk_tier`; `accepted_values` on `audit_check_diff` (must be `0`), `inventory_risk_rating` (Healthy / Warning: Slow Moving / Critical: Obsolete / Adjustment Required: NRV < Cost), `risk_tier` (High / Medium / Low); and `unique_combination_of_columns` on `(fiscal_year, product_id)`.
 ![Data Tests](./images/model_data_tests.png)
 
-Referenced downstream by `audit_inventory_exceptions.sql` (ad-hoc audit analysis) and the `inventory_fiscal_report` semantic model (MetricFlow) — the same tested mart feeds both the audit drill-down and governed metric definitions.
+Referenced downstream by `audit_inventory_exceptions.sql` (ad-hoc audit analysis), the `inventory_fiscal_report` semantic model (MetricFlow), and the Inventory Dashboard exposure (Tableau) — the same tested mart feeds the audit drill-down, governed metric definitions, and the BI layer.
 ![Analyses](./images/model_data_analyses.png)
 ![Semantic Models](./images/model_data_semantic_models.png)
+![Exposures](./images/model_data_exposures.png)
 
 **Dependency Graph**
 Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fiscal_year_end` (macro), and `audit_materiality_thresholds` (seed) — all four dbt node types wired into a single model.
@@ -339,6 +342,8 @@ Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fis
 
 ### 5. Dashboard Showcase
 A 4-tab Tableau workbook (`tableau_workbook/audit_ready_dbt_dashboard (desktop) .twb`, packaged as `(server).twbx`) consuming the CSV exports above — one tab per mart, each pairing KPI tiles with an audit-oriented drill-down, putting the accounting logic above into an actual audit view.
+
+Each tab is declared as a dbt **exposure** (📂 `models/marts/finance/_finance__exposures.yml`), with an explicit `depends_on` back to its source mart(s) and an `owner`. This closes the lineage graph past the warehouse boundary — `dbt docs generate` shows not just staging → marts, but marts → the dashboards actually consuming them, so a breaking change to a mart surfaces which dashboard it would affect before it ships.
 
 **[▶ View live on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)**
 
