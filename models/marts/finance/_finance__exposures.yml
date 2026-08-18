@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../../.vscode/empty-schema.json
+exposures:
+  - name: revenue_dashboard
+    label: "Revenue Dashboard"
+    type: dashboard
+    maturity: high
+    url: https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue
+    description: >-
+      Gross vs. recognized revenue by month, with automated Potential
+      Cut-off Risk detection when shipped_at falls in a different fiscal
+      period than created_at.
+    depends_on:
+      - ref('revenue')
+    owner:
+      name: Sanghyun Park
+      email: shpaddress23@gmail.com
+
+  - name: order_reconciliation_dashboard
+    label: "Order Reconciliation Dashboard"
+    type: dashboard
+    maturity: high
+    url: https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/OrderReconciliation
+    description: >-
+      Master-to-subledger reconciliation status, splitting genuine
+      reconciliation failures from benign variance patterns (partial
+      refunds, mixed shipments) so only true exceptions surface.
+    depends_on:
+      - ref('order_reconciliation')
+    owner:
+      name: Sanghyun Park
+      email: shpaddress23@gmail.com
+
+  - name: refund_returns_dashboard
+    label: "Refund & Returns Dashboard"
+    type: dashboard
+    maturity: high
+    url: https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/RefundReturns
+    description: >-
+      Refund rate trend, product return rate by category, and a
+      fulfillment lead-time integrity check flagging shipped_at
+      timestamps recorded earlier than created_at.
+    depends_on:
+      - ref('refund_reconciliation')
+      - ref('order_item_revenue')
+    owner:
+      name: Sanghyun Park
+      email: shpaddress23@gmail.com
+
+  - name: inventory_dashboard
+    label: "Inventory Dashboard"
+    type: dashboard
+    maturity: high
+    url: https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Inventory
+    description: >-
+      LCM write-down and materiality-breach controls set against an
+      Avg Days on Hand trend, surfacing slow-moving inventory risk.
+    depends_on:
+      - ref('inventory_fiscal_report')
+      - ref('inventory_sellthrough')
+    owner:
+      name: Sanghyun Park
+      email: shpaddress23@gmail.com
