@@ -94,5 +94,90 @@ jobs:
       - name: dbt deps
         run: dbt deps --profiles-dir .
 
+      # --- Slim CI: fetch main's last successful build as a deferral baseline ---
+      # DuckDB is a single-file database (no persistent shared warehouse to defer
+      # against), so both the manifest AND the built dev.duckdb file from main's
+      # last green run are restored here — the duckdb file stands in for "prod"
+      # so --defer has real tables to resolve unbuilt refs against.
+      - name: Download baseline state from main (PRs only)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              branch: 'main',
+              status: 'success',
+              per_page: 1,
+            });
+            if (runs.data.workflow_runs.length === 0) {
+              core.warning('No successful main run found — falling back to a full build.');
+              return;
+            }
+            const runId = runs.data.workflow_runs[0].id;
+
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+
+            for (const name of ['prod-manifest', 'prod-duckdb']) {
+              const artifact = artifacts.data.artifacts.find(a => a.name === name);
+              if (!artifact) {
+                core.warning(`No ${name} artifact on main's last successful run — falling back to a full build.`);
+                return;
+              }
+              const download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+                archive_format: 'zip',
+              });
+              fs.writeFileSync(`${name}.zip`, Buffer.from(download.data));
+            }
+
+      - name: Unpack baseline state (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f prod-manifest.zip ] && [ -f prod-duckdb.zip ]; then
+            mkdir -p prod-manifest
+            unzip -o prod-manifest.zip -d prod-manifest
+            unzip -o prod-duckdb.zip -d prod-duckdb
+            cp prod-duckdb/dev.duckdb dev.duckdb
+            echo "BASELINE_AVAILABLE=true" >> "$GITHUB_ENV"
+          else
+            echo "No baseline artifacts found; will run a full build instead." >&2
+          fi
+
       - name: dbt build
-        run: dbt build --profiles-dir . --target dev
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$BASELINE_AVAILABLE" = "true" ]; then
+            echo "Slim CI: building state:modified+ against main's last successful state"
+            dbt build --select "state:modified+" --defer --state prod-manifest --profiles-dir . --target dev
+          else
+            echo "Full build (push to main, or no baseline state available)"
+            dbt build --profiles-dir . --target dev
+          fi
+
+      # Only main's own build is a valid deferral baseline for the next PR —
+      # a PR's slim (partial) build must never overwrite it.
+      - name: Upload state for future slim CI runs (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-manifest
+          path: target/manifest.json
+          retention-days: 90
+
+      - name: Upload built database for future slim CI runs (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-duckdb
+          path: dev.duckdb
+          retention-days: 90
