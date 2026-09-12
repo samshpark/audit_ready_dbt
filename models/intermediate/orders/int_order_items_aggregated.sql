@@ -6,7 +6,7 @@ aggregate_items_to_order_grain as (
     select
         order_id,
         user_id,
-        string_agg(distinct order_item_status order by order_item_status)
+        {{ string_agg_distinct('order_item_status') }}
             as order_item_status_list,
         count(*) as subledger_item_count,
         round(sum(sale_price), 2) as total_order_amount,
