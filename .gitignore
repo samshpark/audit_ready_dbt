@@ -9,6 +9,7 @@ credentials/
 !.vscode/settings.json
 !.vscode/empty-schema.json
 !pyrightconfig.json
+!docs/bigquery_prod_run_results.raw.json
 
 .user.yml
 profiles.yml

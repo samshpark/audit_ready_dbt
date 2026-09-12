@@ -38,7 +38,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
-* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command.
+* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than DuckDB-only syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic), so the same SQL runs unmodified against the `prod` BigQuery target.
+    - **BigQuery run results**: Verified end-to-end on 2026-09-12 — `dbt build --target prod` against the live BigQuery warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/bigquery_prod_verification.md`](docs/bigquery_prod_verification.md) for details.
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
