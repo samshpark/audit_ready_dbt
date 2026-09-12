@@ -98,14 +98,8 @@ select * from final
         select int_orders_joined.order_id
         from int_orders_joined
         where
-            int_orders_joined.first_item_created_at
-            >= current_timestamp
-            - interval '{{ var("incremental_lookback_days") }} days'
-            or int_orders_joined.last_refund_at
-            >= current_timestamp
-            - interval '{{ var("incremental_lookback_days") }} days'
-            or int_orders_joined.shipped_at
-            >= current_timestamp
-            - interval '{{ var("incremental_lookback_days") }} days'
+            {{ within_incremental_lookback('int_orders_joined.first_item_created_at') }}
+            or {{ within_incremental_lookback('int_orders_joined.last_refund_at') }}
+            or {{ within_incremental_lookback('int_orders_joined.shipped_at') }}
     )
 {% endif %}

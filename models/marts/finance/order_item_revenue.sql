@@ -40,7 +40,7 @@ final as (
 select * from final
 {% if is_incremental() %}
     where
-        created_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
-        or shipped_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
-        or returned_at >= current_timestamp - interval '{{ var("incremental_lookback_days") }} days'
+        {{ within_incremental_lookback('created_at') }}
+        or {{ within_incremental_lookback('shipped_at') }}
+        or {{ within_incremental_lookback('returned_at') }}
 {% endif %}

@@ -23,12 +23,8 @@ select_refund_metrics as (
     from int_order_items_aggregated
     {% if is_incremental() %}
         where
-            first_item_created_at
-            >= current_timestamp
-            - interval '{{ var("incremental_lookback_days") }} days'
-            or last_refund_at
-            >= current_timestamp
-            - interval '{{ var("incremental_lookback_days") }} days'
+            {{ within_incremental_lookback('first_item_created_at') }}
+            or {{ within_incremental_lookback('last_refund_at') }}
     {% endif %}
 ),
 
@@ -40,7 +36,7 @@ final as (
             as refund_value_rate,
         round(
             coalesce(
-                cast(total_returned_items as float)
+                cast(total_returned_items as {{ dbt.type_float() }})
                 / nullif(total_item_count, 0),
                 0
             ),
