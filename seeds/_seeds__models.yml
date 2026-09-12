@@ -28,6 +28,7 @@ seeds:
           - not_null
           - accepted_values:
               values: [10000, 5000, 2500]
+              quote: false
       - name: rationale
         description: "Plain-language justification for the assigned risk tier."
         tests:

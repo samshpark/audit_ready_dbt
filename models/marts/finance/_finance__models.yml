@@ -71,6 +71,7 @@ models:
         tests:
           - accepted_values:
               values: [0]
+              quote: false
               severity: warn
               description: >-
                 Warning if reconciliation fails beyond the 0.019 threshold.
