@@ -1,4 +1,7 @@
 {
+    "files.associations": {
+        ".sqlfluff": "ini"
+    },
     "sqltools.connections": [],
     "sqltools.useNodeRuntime": true,
     "dbt.perspectiveTheme": "Vintage",
