@@ -22,13 +22,15 @@ years as (
     select distinct inbound_fiscal_year as fiscal_year
     from int_inventory_items_joined
     where inbound_fiscal_year is not null
-    union
+    union distinct
     select distinct outbound_fiscal_year
     from int_inventory_items_joined
     where outbound_fiscal_year is not null
 ),
 
 {# 2. By Fiscal Year & Product: Detail Metrics #}
+
+{% set fiscal_year_end_expr = fiscal_year_end('years.fiscal_year') %}
 
 product_year_flow as (
     select
@@ -162,10 +164,12 @@ product_year_flow as (
                     or inventory.outbound_fiscal_year > years.fiscal_year
                 )
                 then
-                    (
-                        {{ fiscal_year_end('years.fiscal_year') }}
-                        - cast(inventory.inbound_at as date)
-                    )
+                    {#- DATE - DATE yields INTERVAL on BigQuery, which
+                       ROUND() below cannot accept -- use datediff_days()
+                       to get a plain day count on every adapter. -#}
+                    {{ datediff_days(
+                        'inventory.inbound_at', fiscal_year_end_expr
+                    ) }}
         end), 1) as avg_days_on_hand_at_year_end
 
     from years
@@ -173,12 +177,12 @@ product_year_flow as (
     left join scd_products
         on
             inventory.product_id = scd_products.product_id
-            and {{ fiscal_year_end('years.fiscal_year') }}
-            >= scd_products.dbt_valid_from
+            and {{ fiscal_year_end_expr }}
+            >= cast(scd_products.dbt_valid_from as date)
             and (
                 scd_products.dbt_valid_to is null
-                or {{ fiscal_year_end('years.fiscal_year') }}
-                < scd_products.dbt_valid_to
+                or {{ fiscal_year_end_expr }}
+                < cast(scd_products.dbt_valid_to as date)
             )
     group by 1, 2, 3, 4, 5
 ),

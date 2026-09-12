@@ -104,6 +104,37 @@ calculate_inventory_metrics as (
         end as days_in_inventory,
 
         case
+            when
+                inventory_item_id is null
+                then 'Error: Outbound without Inbound'
+            when outbound_at is null then 'On-hand (Ending Inventory)'
+            else 'Sold (COGS)'
+        end as stock_status,
+
+        {# Evaluate whether the product_id is a match #}
+
+        case
+            when
+                inbound_product_id is not null
+                and outbound_product_id is not null
+                and inbound_product_id <> outbound_product_id
+                then 'Product Not Match'
+            else 'Product Match'
+        end as product_match,
+        extract(year from cast(outbound_at as timestamp))
+            as outbound_fiscal_year,
+        extract(year from cast(inbound_at as timestamp)) as inbound_fiscal_year
+
+    from join_inbound_to_outbound
+),
+
+{# `days_in_inventory` is a same-select alias reference below, which DuckDB
+   allows but BigQuery (standard SQL) does not -- split into its own CTE so
+   it is a real column by the time aging_velocity_bucket is computed. #}
+calculate_aging_velocity as (
+    select
+        *,
+        case
             {# 1. Ending Inventory #}
 
             when outbound_at is null
@@ -133,31 +164,8 @@ calculate_inventory_metrics as (
                 days_in_inventory > 365 * 2
                 then 'Sold: 02. Normal (2yr-3yr)'
             else 'Sold: 01. Fast (<2y)'
-        end as aging_velocity_bucket,
-
-        case
-            when
-                inventory_item_id is null
-                then 'Error: Outbound without Inbound'
-            when outbound_at is null then 'On-hand (Ending Inventory)'
-            else 'Sold (COGS)'
-        end as stock_status,
-
-        {# Evaluate whether the product_id is a match #}
-
-        case
-            when
-                inbound_product_id is not null
-                and outbound_product_id is not null
-                and inbound_product_id <> outbound_product_id
-                then 'Product Not Match'
-            else 'Product Match'
-        end as product_match,
-        extract(year from cast(outbound_at as timestamp))
-            as outbound_fiscal_year,
-        extract(year from cast(inbound_at as timestamp)) as inbound_fiscal_year
-
-    from join_inbound_to_outbound
+        end as aging_velocity_bucket
+    from calculate_inventory_metrics
 )
 
-select * from calculate_inventory_metrics
+select * from calculate_aging_velocity
