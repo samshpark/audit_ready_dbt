@@ -12,8 +12,8 @@ renamed as (
         product_brand,
         lower(product_department) as product_department,
         product_sku,
-        cast(cost as double) as cost,
-        cast(product_retail_price as double) as product_retail_price,
+        cast(cost as {{ dbt.type_float() }}) as cost,
+        cast(product_retail_price as {{ dbt.type_float() }}) as product_retail_price,
         cast(created_at as timestamp) as created_at,
         cast(sold_at as timestamp) as sold_at
     from

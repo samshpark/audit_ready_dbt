@@ -16,7 +16,10 @@ agg as (
         sum(case when shipped_at < created_at then 1 else 0 end)
             as negative_lead_time_count,
         round(
-            sum(case when shipped_at < created_at then 1 else 0 end)::float
+            cast(
+                sum(case when shipped_at < created_at then 1 else 0 end)
+                as {{ dbt.type_float() }}
+            )
             / nullif(count(*), 0),
             4
         ) as negative_lead_time_rate

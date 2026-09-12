@@ -11,8 +11,8 @@ renamed as (
         brand,
         department,
         sku,
-        cast(cost as double) as cost,
-        cast(retail_price as double) as retail_price
+        cast(cost as {{ dbt.type_float() }}) as cost,
+        cast(retail_price as {{ dbt.type_float() }}) as retail_price
     from
         source
 )

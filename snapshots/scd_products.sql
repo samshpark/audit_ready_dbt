@@ -11,9 +11,9 @@
 }}
 
 select
-    cast(id as varchar) as product_id,
-    cast(cost as double) as cost,
-    cast(retail_price as double) as retail_price,
+    cast(id as {{ dbt.type_string() }}) as product_id,
+    cast(cost as {{ dbt.type_float() }}) as cost,
+    cast(retail_price as {{ dbt.type_float() }}) as retail_price,
     lower(category) as category,
     lower(brand) as brand,
     name as product_name
