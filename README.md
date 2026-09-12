@@ -38,8 +38,12 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
-* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than DuckDB-only syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic), so the same SQL runs unmodified against the `prod` BigQuery target.
+* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** or **Snowflake** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than warehouse-specific syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic, `string_agg(... order by ...)`), so the same SQL runs unmodified across all three.
     - **BigQuery run results**: Verified end-to-end on 2026-09-12 — `dbt build --target prod` against the live BigQuery warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/bigquery_prod_verification.md`](docs/bigquery_prod_verification.md) for details.
+      ![BigQuery Datasets built by dbt](./images/BigQuery_dbt_build.png)
+      ![BigQuery staging, intermediate, mart, and snapshot tables built by dbt](./images/BigQuery_dbt_build_stg_int_mart_snap.png)
+    - **Snowflake run results**: Verified end-to-end on 2026-09-13 — `dbt build --target snowflake` against a live Snowflake warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/snowflake_prod_verification.md`](docs/snowflake_prod_verification.md) for details.
+      ![Snowflake databases and schemas built by dbt](./images/snowflake_dbt_build.png)
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
@@ -120,6 +124,7 @@ Repeated SQL expressions are extracted into reusable macros to enforce DRY princ
 | `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE`, capped at `current_date` so the year still in progress is evaluated as of today rather than a not-yet-elapsed December 31st |
 | `datediff_days(start, end)` | `int_inventory_items_joined` (×2), `inventory_fiscal_report` (×1) | Calculates day difference between two date columns via `dbt.datediff()`, used for inventory aging/velocity buckets and fiscal year-end day counts |
 | `within_incremental_lookback(column)` | `order_reconciliation`, `revenue`, `order_item_revenue` (×3 each), `refund_reconciliation` (×2) | Returns whether a timestamp column falls within the incremental lookback window (`var("incremental_lookback_days")`), used to build each incremental mart's `is_incremental()` filter |
+| `string_agg_distinct(column)` | `int_order_items_aggregated` (×1) | Concatenates a column's distinct values, ordered — dispatches to `listagg(distinct col, sep) within group (order by col)` on Snowflake (no `string_agg(... order by ...)` equivalent there) and `string_agg(distinct col order by col)` elsewhere |
 
 ```sql
 -- Example: fiscal_year_end macro in use

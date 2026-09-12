@@ -17,7 +17,7 @@ macros:
   - name: datediff_days
     description: >
       Calculates the number of days between two date columns via dbt's cross-database
-      dbt.datediff() macro, so the same call compiles correctly on DuckDB and BigQuery.
+      dbt.datediff() macro, so the same call compiles correctly on DuckDB, BigQuery, and Snowflake.
       Both inputs are cast to DATE before differencing to handle timestamp inputs safely.
       Used in int_inventory_items_joined for aging duration and velocity bucket calculations,
       and in inventory_fiscal_report for avg_days_on_hand_at_year_end.
@@ -42,3 +42,15 @@ macros:
       - name: column_name
         type: column reference
         description: The timestamp column to test against the lookback window (e.g., 'created_at').
+
+  - name: string_agg_distinct
+    description: >
+      Concatenates a column's distinct values in order. DuckDB and BigQuery both support
+      string_agg(distinct col order by col), but Snowflake has no equivalent syntax -- it
+      requires listagg(distinct col, sep) within group (order by col) instead. Dispatches
+      on target.type to render the correct form for each adapter.
+      Used in int_order_items_aggregated to build order_item_status_list.
+    arguments:
+      - name: column_name
+        type: column reference
+        description: The column whose distinct values are concatenated (e.g., 'order_item_status').
