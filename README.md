@@ -17,7 +17,7 @@ A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** appl
 ---
 
 ## 2. Tech Stack & Engineering Value
-* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Apache Airflow, Docker, Parquet, MetricFlow, SQLFluff, Ruff.
+* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Snowflake, **AWS (S3, Glue Data Catalog, Athena, Lambda, SAM/CloudFormation, IAM)**, Apache Airflow, Docker, Parquet, Iceberg, MetricFlow, SQLFluff, Ruff, pytest.
 * **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
 * **Cost-Efficiency**: By developing against a **Python-to-DuckDB** local pipeline instead of iterating directly against BigQuery, development-time warehouse compute costs are close to zero — BigQuery is only touched once, at ingestion.
 * **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
@@ -31,11 +31,14 @@ I adopted a hybrid architecture to balance development efficiency with productio
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
 * **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends synthetic orders daily — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable. ~23% of orders start as genuinely unshipped (`Processing`) and are rolled forward on later runs (shipped, still pending, or aged out to `cancelled`), so recognized revenue and cut-off risk stay realistic instead of every order shipping within 48 hours.
 * **AWS Source Layer** (📂 `scripts/load_to_s3_athena.py`): Publishes the same Parquet files to **S3** and registers them as **Glue Data Catalog** external tables (one Glue database per dbt source), so the Athena target reads identical source data. Rewrites nanosecond timestamps to microseconds on upload (Athena's Parquet reader rejects ns); `--source incremental` republishes only the daily files.
+* **BigQuery Source Layer** (📂 `scripts/load_to_bigquery.py`): Loads the same Parquet files into BigQuery for the weekly cross-warehouse parity run. Each table is dropped and recreated, which restarts the BigQuery sandbox's 60-day table expiry. Both loaders share one source definition and timestamp handling (📂 `scripts/source_files.py`).
 * **Local Data Lake**:
     - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
     - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py`, then updated automatically by the Airflow pipeline.
 * **Seeds** (`seeds/`):
     - 📂 `seeds/audit_materiality_thresholds.csv` — CPA-defined audit risk tier and materiality threshold per product category (lookup table)
+    - 📂 `seeds/chart_of_accounts.csv` — GL accounts with account type and normal balance
+    - 📂 `seeds/journal_entry_rules.csv` — posting rules (debit / credit account per entry type), kept as data so accounting-policy changes are reviewed without touching SQL
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
@@ -46,6 +49,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - **Snowflake run results**: Verified end-to-end on 2026-09-13 — `dbt build --target snowflake` against a live Snowflake warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/snowflake_prod_verification.md`](docs/snowflake_prod_verification.md) for details.
       ![Snowflake databases and schemas built by dbt](./images/snowflake_dbt_build.png)
     - **AWS Athena run results**: Verified end-to-end on 2026-09-29 — `dbt build --target athena` against **S3 + Glue Data Catalog + Athena** completed with zero errors (166 pass / 22 success / 1 expected warn), identical to BigQuery and Snowflake. Incremental marts are stored as **Iceberg** tables so `merge` works on Athena; a follow-up incremental run confirmed rows were upserted without duplicates. Access uses a dedicated least-privilege IAM user scoped to the project's S3 buckets. See [`docs/athena_prod_verification.md`](docs/athena_prod_verification.md) for details.
+    - **Cross-warehouse parity (automated)**: Passing tests on every warehouse doesn't prove the *numbers* agree. The weekly `cross_warehouse_parity` DAG loads identical sources into DuckDB, BigQuery, and Athena, fully rebuilds each, and compares journal-entry debits, row counts, and headline mart totals to the cent. Its first run caught two real DuckDB-only defects the per-warehouse test suites had missed — 32-bit float currency columns and host-time-zone-dependent posting dates — both fixed (see the macros table below). See [`docs/cross_warehouse_parity.md`](docs/cross_warehouse_parity.md).
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
@@ -101,6 +105,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, turnover ratios, and CPA-defined `risk_tier` / `materiality_threshold` per product category.
     - 📂 `order_item_revenue.sql`: Item-level revenue model (grain: one row per order item), including product category/brand/name. Enables status-level breakdown (`complete` / `returned` / `shipped` etc.) that is not possible at order grain — essential for partial refund scenarios where a single order contains items with different statuses.
     - 📂 `inventory_sellthrough.sql`: One row per physical inventory unit received, independent of order fulfillment status — answers "has this unit ever sold" directly.
+    - 📂 `journal_entry_lines.sql`: GL support — one row per source document (order for revenue, order item for returns, inventory item for COGS), with amounts taken from the marts that own each recognition rule.
+    - 📂 `journal_entries.sql`: Summarized GL postings — one balanced debit/credit pair per posting date and entry type, mapped through the `journal_entry_rules` and `chart_of_accounts` seeds. See [§4.5](#5-general-ledger-posting--exception-pipeline-aws-lambda).
     - 📂 `_finance__models.yml` — consolidated model documentation
     - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
     - 📂 `_finance__metrics.yml` — business metric definitions
@@ -115,7 +121,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 > - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons:
 >   1. `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times;
 >   2. intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
-> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a lookback window (`incremental_lookback_days`, default: 14 days) filtered on business timestamps (`created_at`, `shipped_at`, `returned_at`/`last_refund_at`) to catch late shipments and returns. Since that only re-scans *recent* timestamps, `dbt_run_marts` also runs `--full-refresh` on Sundays to catch backdated corrections older than the window. `inventory_fiscal_report` and `inventory_sellthrough` are plain full-refresh **tables** — cross-year LAG calculations and the pass-through sell-through view both need complete recalculation, not incremental merge.
+> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a lookback window (`incremental_lookback_days`, default: 14 days) filtered on business timestamps (`created_at`, `shipped_at`, `returned_at`/`last_refund_at`) to catch late shipments and returns. Since that only re-scans *recent* timestamps, `dbt_run_marts` also runs `--full-refresh` on Sundays to catch backdated corrections older than the window. `inventory_fiscal_report`, `inventory_sellthrough`, `journal_entry_lines`, and `journal_entries` are plain full-refresh **tables** — cross-year LAG calculations, the pass-through sell-through view, and the GL (which must always tie to the current marts) all need complete recalculation, not incremental merge.
 > - **Utilities**: `table` — `metricflow_time_spine` is materialized as a static table since MetricFlow requires a pre-built date spine to perform time-based aggregations.
 
 #### Jinja Macros
@@ -127,6 +133,8 @@ Repeated SQL expressions are extracted into reusable macros to enforce DRY princ
 | `datediff_days(start, end)` | `int_inventory_items_joined` (×2), `inventory_fiscal_report` (×1) | Calculates day difference between two date columns via `dbt.datediff()`, used for inventory aging/velocity buckets and fiscal year-end day counts |
 | `within_incremental_lookback(column)` | `order_reconciliation`, `revenue`, `order_item_revenue` (×3 each), `refund_reconciliation` (×2) | Returns whether a timestamp column falls within the incremental lookback window (`var("incremental_lookback_days")`), used to build each incremental mart's `is_incremental()` filter |
 | `string_agg_distinct(column)` | `int_order_items_aggregated` (×1) | Concatenates a column's distinct values, ordered — dispatches to `listagg(distinct col, sep) within group (order by col)` on Snowflake (no `string_agg(... order by ...)` equivalent there), `array_join(array_sort(array_distinct(array_agg(col))), sep)` on Athena (Trino has neither form), and `string_agg(distinct col order by col)` elsewhere |
+| `duckdb__type_float()` | every `dbt.type_float()` call on DuckDB | Overrides dbt's DuckDB `float` (32-bit REAL) with `double`, matching the 64-bit float every other warehouse uses — REAL silently loses cents on currency columns |
+| `set_utc_session_timezone()` | `on-run-start` hook | Pins DuckDB's session time zone to UTC so casting UTC source timestamps doesn't shift posting dates or month-end cut-off to the host machine's zone; renders nothing on other adapters |
 
 ```sql
 -- Example: fiscal_year_end macro in use
@@ -139,17 +147,25 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 4. Orchestration (Apache Airflow + Docker)
 * **File**: 📂 `dags/dbt_incremental_pipeline.py`
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
-* **Pipeline**:
+* **Pipeline**: after step 1 the DAG forks into a local **DuckDB branch** (feeds the Tableau exports) and an **AWS branch** (the production Athena warehouse and the journal-entry export).
     1. `generate_incremental_data` — Appends ~15 synthetic orders to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
     2. `dbt_source_freshness` — Checks `incr_orders` / `incr_order_items` freshness (warn after 30h, error after 54h, sized to the daily cadence). Placed right after the step that just wrote today's data, so it always passes when the DAG runs at all — it demonstrates the mechanism rather than catching a real failure mode, since the one failure that matters here (the host machine being off) leaves nothing running to report it. See the task's `doc_md` for the full caveat.
-    3. `dbt_seed` — Reloads `audit_materiality_thresholds` lookup table so threshold changes take effect without manual intervention
+    3. `dbt_seed` — Reloads the `audit_materiality_thresholds`, `chart_of_accounts`, and `journal_entry_rules` lookup tables so threshold or posting-rule changes take effect without manual intervention
     4. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
     5. `dbt_run_intermediate` — Recreates all five intermediate views. Views already reflect current data on every query (no dbt run needed for freshness) — this step is a safety net that keeps view definitions in sync if a model's SQL changes.
     6. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue` (full-refresh instead on Sundays, to catch backdated corrections the lookback window can't see); full-refresh rebuild of `inventory_fiscal_report` and `inventory_sellthrough` (plain table materializations — cross-year LAG logic and the unit-level sell-through view both need complete recalculation, not a partial merge)
     7. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
     8. `export_for_tableau` — Exports all six mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
 
-> **Note**: All 8 steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap.
+    **AWS branch** (runs in parallel with steps 2–8):
+
+    - a. `upload_incremental_to_s3` — Republishes `incr_*.parquet` to S3 and re-registers the Glue tables
+    - b. `dbt_build_athena` — `dbt build --target athena`: every model and test, including the journal balance and control-total tests, so a failing control stops the branch before anything is posted. Uses its own `--target-path` so it never collides with the DuckDB branch's `target/`.
+    - c. `export_journal_entries` — Invokes the `audit-ready-je-pipeline` Lambda for the run's business date (see [§4.5](#5-general-ledger-posting--exception-pipeline-aws-lambda))
+
+> **Note**: The DuckDB steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap. The Airflow containers read AWS credentials from a read-only mount of `~/.aws` (never from the repo); the daily pipeline's IAM user can *invoke* the Lambda but not change it.
+
+* **Weekly parity check** (📂 `dags/cross_warehouse_parity.py`, Sundays 12:00 UTC or manual): reloads all sources into BigQuery and Athena, runs `dbt build --full-refresh` on DuckDB (a separate `parity.duckdb`), BigQuery, and Athena in parallel, then `scripts/check_warehouse_parity.py` compares ten metrics across all three via `dbt show` — so `ref()` resolves per warehouse and no engine-specific SQL is needed — and fails on any difference. Snowflake is excluded because it ran on a 30-day trial.
 
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
 
@@ -184,6 +200,8 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `tests/assert_no_variance_in_order_recon.sql`
         - 📂 `tests/assert_revenue_recognition_logic.sql`
         - 📂 `tests/assert_fulfillment_lead_time_within_baseline.sql` — warns if the negative-lead-time rate rises well past its historical baseline
+        - 📂 `tests/assert_journal_entries_balanced.sql` — every journal entry's debits equal its credits to the cent
+        - 📂 `tests/assert_journal_entries_reconcile_to_marts.sql` — control totals: posted revenue ties to the item-level subledger, returns to `refund_reconciliation`, COGS to `inventory_fiscal_report`
     
     * **Audit Exception Analyses** (`analyses/`) — ad-hoc audit queries compiled via `dbt compile`, using `{{ ref() }}` for table references. Copy the rendered SQL from `target/compiled/` to run directly against DuckDB:
         - 📂 `audit_inventory_exceptions.sql` — flags inventory equation imbalances (`audit_check_diff ≠ 0`), LCM write-down candidates, and slow-moving/obsolete stock
@@ -191,7 +209,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
         - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
         - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
-* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build.
+* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build. A separate job runs Ruff and the `lambdas/` pytest suite on Python 3.12 (the Lambda runtime).
 
 ### 7. SQL Code Quality (SQLFluff)
 * **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
@@ -350,7 +368,37 @@ Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fis
 ![Depends On Snapshots](./images/model_depends_snapshot.png)
 ![Depends On Macros](./images/model_depends_macro.png)
 
-### 5. Dashboard Showcase
+### 5. General Ledger Posting & Exception Pipeline (AWS Lambda)
+* **Files**: 📂 `models/marts/finance/journal_entries.sql`, 📂 `models/marts/finance/journal_entry_lines.sql`, 📂 `lambdas/`
+* **Division of labor**:
+    - **dbt owns the accounting.** `journal_entry_lines` takes each amount from the mart that owns its recognition rule — revenue from `revenue.recognized_revenue`, returns from returned items in `order_item_revenue`, COGS from item-level historical cost — and `journal_entries` rolls them into one balanced Dr/Cr pair per posting date and entry type. The GL never re-derives recognition logic, so it cannot drift from the marts. Two tests enforce double-entry and control-total integrity on every build, on every warehouse.
+    - **Lambda is the integration layer.** Invoked by Airflow once the Athena build and its tests pass, it exports the day's entries as a GL upload file with order/item-level support, runs the exception rules, and writes both to S3.
+
+| Entry | Posting | Posting date | Source |
+|---|---|---|---|
+| `REV` | Dr 1200 Accounts Receivable / Cr 4000 Sales Revenue | `shipped_at` | `revenue.recognized_revenue` |
+| `RET` | Dr 4100 Sales Returns & Allowances / Cr 1200 Accounts Receivable | `returned_at` | returned items in `order_item_revenue` |
+| `COGS` | Dr 5000 Cost of Goods Sold / Cr 1300 Inventory | `shipped_at` | item-level cost (specific identification) |
+
+* **Revenue recognition policy**: Revenue is recognized when control transfers under ASC 606 / IFRS 15. With FOB shipping-point terms, that is at **shipment**, consistent with `revenue.sql`. Under FOB destination terms the trigger would be `delivered_at` — a policy change that belongs in `revenue.sql`, not the GL layer.
+* **Known simplification**: Returns are posted when they occur. Strict ASC 606 would estimate expected returns at the point of sale as a refund liability (variable consideration); that estimate is out of scope here.
+* **Exception rules** (📂 `lambdas/je_pipeline/rules.py`, each covered by pytest in 📂 `lambdas/tests/`):
+
+| Rule | Severity | Flags |
+|---|---|---|
+| `RECONCILIATION_BREAK` | High | Master/sub-ledger breaks — orphan or missing sub-ledger, item-count variance, unexplained status variance (explained partial refunds/shipments are excluded) |
+| `CUTOFF_RISK` | Medium | Ordered and shipped in different months |
+| `FUTURE_DATED_SHIPMENT` | High | `shipped_at` later than the run time — revenue recognized for a shipment that hasn't happened |
+| `DUPLICATE_SUSPECT` | High | Same customer and amount within 10 minutes |
+| `AMOUNT_OUTLIER` | Seed risk tier | Item price above the category's Q3 + 3×IQR; severity comes from `audit_materiality_thresholds` |
+| `REFUND_EXCEEDS_REVENUE` | High | Refund larger than the order's gross revenue |
+
+* **Outputs** (`s3://audit-ready-dbt-reports-*/je-pipeline/period=<start>_<end>/`): `journal_entries.csv` (GL upload file), `journal_detail.csv` (support for every amount), `exceptions.csv`, `run_summary.json`. The bucket is versioned with `DeletionPolicy: Retain` — each period's export is a point-in-time record of what was posted, which the marts cannot provide because incremental merges and fixes keep changing history.
+* **Infrastructure as code** (📂 `lambdas/template.yaml`, deployed with AWS SAM): the function, its least-privilege execution role (Athena, Glue read, S3 read, write only to query results and the reports bucket), the reports bucket, and a 30-day log group. Deploys use a separate IAM user; the daily pipeline's user can only invoke the function.
+* **First-run finding**: On its first real run the `FUTURE_DATED_SHIPMENT` rule flagged orders whose `shipped_at` was set up to 48 hours *ahead* of generation time by `scripts/generate_daily_incremental.py` — meaning `revenue` was recognizing revenue for shipments that had not happened yet. Tracked as a separate fix: the generator will record lifecycle events only once they have happened, and a dbt test (`assert_no_future_dated_events`, error severity) will block the Athena build — and so the GL export — if a future-dated event ever reappears.
+* **Verification**: [`docs/je_pipeline_verification.md`](docs/je_pipeline_verification.md).
+
+### 6. Dashboard Showcase
 A 4-tab Tableau workbook (`tableau_workbook/audit_ready_dbt_dashboard (desktop) .twb`, packaged as `(server).twbx`) consuming the CSV exports above — one tab per mart, each pairing KPI tiles with an audit-oriented drill-down, putting the accounting logic above into an actual audit view.
 
 Each tab is declared as a dbt **exposure** (📂 `models/marts/finance/_finance__exposures.yml`), with an explicit `depends_on` back to its source mart(s) and an `owner`. This closes the lineage graph past the warehouse boundary — `dbt docs generate` shows not just staging → marts, but marts → the dashboards actually consuming them, so a breaking change to a mart surfaces which dashboard it would affect before it ships.
@@ -452,6 +500,27 @@ Open **http://localhost:8080** and log in with `admin` / `admin`.
 Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC daily, or trigger it manually from the UI.
 
 The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run intermediate → dbt run marts → dbt test → export_for_tableau` on every run.
+
+#### Option C — AWS (Athena + journal-entry Lambda) *(optional)*
+Requires an AWS account and two IAM users: one for the pipeline (S3/Glue/Athena access plus `lambda:InvokeFunction` on the function) and one for deploys. Add an `athena` output to `profiles.yml`:
+```yaml
+    athena:
+      type: athena
+      aws_profile_name: <your-pipeline-profile>
+      region_name: us-east-1
+      s3_staging_dir: s3://<athena-bucket>/query-results/
+      s3_data_dir: s3://<athena-bucket>/tables/
+      database: awsdatacatalog
+      schema: audit_ready_dbt
+      work_group: primary
+      threads: 4
+```
+```bash
+python scripts/load_to_s3_athena.py          # publish sources to S3 + Glue
+dbt build --target athena                    # build and test every model on Athena
+cd lambdas && sam build && sam deploy        # deploy the journal-entry Lambda (see samconfig.toml)
+```
+Bucket names are defined in `scripts/load_to_s3_athena.py` and `lambdas/template.yaml` — change them to globally unique names for your account. The Airflow AWS branch and the parity DAG then work as-is; the parity DAG also expects a `parity_duckdb` DuckDB output (`path: parity.duckdb`) in `profiles.yml`.
 
 ### Step 8 — Query metrics via Semantic Layer
 ```bash
