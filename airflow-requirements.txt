@@ -1,3 +1,6 @@
+dbt-core==1.10.20  # pinned: the adapters below would otherwise resolve to a 2.0 pre-release
 dbt-duckdb==1.10.0
+dbt-athena==1.9.5
+dbt-bigquery==1.10.2
 pyarrow>=14.0.0
 pandas>=2.0.0

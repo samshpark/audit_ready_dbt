@@ -13,10 +13,13 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     DBT_PROJECT_DIR: /opt/airflow/dbt_project   # consumed by the DAG
+    AWS_PROFILE: audit-ready-dbt                # named profile from the mounted ~/.aws
+    AWS_DEFAULT_REGION: us-east-1
   volumes:
     - ./dags:/opt/airflow/dags                  # DAG files
     - airflow_logs:/opt/airflow/logs            # Airflow task logs (separate from dbt logs/)
     - .:/opt/airflow/dbt_project                # entire dbt project (parquet, dev.duckdb, etc.)
+    - ${HOME}/.aws:/home/airflow/.aws:ro        # AWS CLI credentials for S3 / Athena / Lambda (never in the repo)
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on

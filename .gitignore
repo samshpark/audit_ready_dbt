@@ -1,5 +1,6 @@
 
 target/
+target_*/
 dbt_packages/
 logs/
 
@@ -18,6 +19,7 @@ profiles.yml
 dev.duckdb
 dev_pu.duckdb
 lint.duckdb
+parity.duckdb
 
 # BigQuery-sourced data is tracked in git for reviewer convenience (~4MB, static)
 # Incremental files are excluded — generated daily by Airflow / generate_daily_incremental.py
@@ -40,3 +42,6 @@ scripts/create_sample_order_items.py
 
 # Node
 node_modules/
+
+# AWS SAM build output
+.aws-sam/
