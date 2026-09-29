@@ -91,15 +91,17 @@ Eight marts in `models/marts/finance/`:
 
 ## Quick Start
 
+Requires Python 3.9–3.13 (dbt 1.10 does not run on 3.14).
+
 ```bash
 git clone https://github.com/samshpark/audit_ready_dbt.git && cd audit_ready_dbt
-python3 -m venv venv && source venv/bin/activate && pip install dbt-duckdb pandas pyarrow
+python3 -m venv venv && source venv/bin/activate && pip install "dbt-core==1.10.20" "dbt-duckdb==1.10.0" pandas pyarrow
+printf 'audit_ready_dbt:\n  target: dev\n  outputs:\n    dev:\n      type: duckdb\n      path: dev.duckdb\n' > profiles.yml
 python scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01
-dbt deps && dbt build        # needs a profiles.yml with a DuckDB `dev` target
-dbt docs generate && dbt docs serve
+dbt deps && dbt build
 ```
 
-Full setup — `profiles.yml`, BigQuery, Airflow, and AWS: [Getting Started](docs/getting_started.md).
+Then `dbt docs generate && dbt docs serve` to browse the lineage. Full setup — `profiles.yml`, BigQuery, Airflow, and AWS: [Getting Started](docs/getting_started.md).
 
 ## More
 

@@ -31,10 +31,11 @@ audit_ready_dbt:
 ```
 
 ## Step 3 — Set up local Python environment
+Requires Python 3.9–3.13 (dbt 1.10 does not run on 3.14).
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install dbt-duckdb dbt-bigquery dbt-metricflow google-cloud-bigquery pandas pyarrow
+pip install "dbt-core==1.10.20" dbt-duckdb dbt-bigquery dbt-metricflow google-cloud-bigquery pandas pyarrow
 ```
 > `dbt-bigquery` is only required if you intend to run against the BigQuery `prod` target.
 

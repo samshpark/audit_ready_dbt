@@ -105,3 +105,17 @@ def test_future_business_date_is_rejected(tmp_path):
 
 def test_lifecycle_plan_is_fixed_per_order():
     assert g.lifecycle_plan(-123) == g.lifecycle_plan(-123)
+
+
+def test_missing_product_attributes_are_empty_strings_not_null(generated):
+    # BigQuery-sourced inventory stores unknown attributes as ''. If synthetic rows
+    # wrote NULL instead, one product would split into two groups in
+    # inventory_fiscal_report (duplicate fiscal_year/product_id rows, broken
+    # roll-forward). pandas 3 reads missing strings as NaN, which `x or ""` let through.
+    _, _, inv = _read(generated)
+    for col in ("product_category", "product_name", "product_brand", "product_department", "product_sku"):
+        assert inv[col].notna().all(), col
+
+
+def test_text_normalizes_every_missing_value():
+    assert [g._text(v) for v in (None, float("nan"), pd.NA, "", "Nike")] == ["", "", "", "", "Nike"]
