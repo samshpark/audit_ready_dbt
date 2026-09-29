@@ -53,7 +53,7 @@ def queries(start: date, end: date) -> dict[str, str]:
             from {FINANCE}.refund_reconciliation
             where {between("order_date", start, end)} and refund_amount > 0
         """,
-        # Whole-history datasets: outlier baselines and future-dated shipments.
+        # Whole-history baseline for the outlier rule.
         "category_stats": f"""
             select product_category,
                    approx_percentile(sale_price, 0.25) as q1,
@@ -61,11 +61,6 @@ def queries(start: date, end: date) -> dict[str, str]:
                    count(*) as n
             from {FINANCE}.order_item_revenue
             group by product_category
-        """,
-        "future_dated": f"""
-            select order_id, shipped_at, recognized_revenue
-            from {FINANCE}.revenue
-            where shipped_at > current_timestamp
         """,
     }
 
@@ -106,20 +101,6 @@ def cutoff_risks(rows: list[dict]) -> list[dict]:
         )
         for r in rows
         if r["cutoff_status"] == "POTENTIAL CUT-OFF RISK"
-    ]
-
-
-def future_dated(rows: list[dict], as_of: datetime) -> list[dict]:
-    return [
-        _exception(
-            "FUTURE_DATED_SHIPMENT",
-            "High",
-            r["order_id"],
-            r["recognized_revenue"],
-            f"shipped_at {r['shipped_at']:%Y-%m-%d %H:%M} is after run time {as_of:%Y-%m-%d %H:%M} UTC",
-        )
-        for r in rows
-        if r["shipped_at"] > as_of
     ]
 
 
@@ -182,11 +163,12 @@ def refund_exceeds_revenue(rows: list[dict]) -> list[dict]:
     ]
 
 
-def run_all(data: dict[str, list[dict]], period_start: datetime, as_of: datetime) -> list[dict]:
+def run_all(data: dict[str, list[dict]], period_start: datetime) -> list[dict]:
+    # Future-dated events are not a rule here: the dbt test assert_no_future_dated_events
+    # fails the Athena build first, so they never reach this function.
     return (
         reconciliation_exceptions(data["reconciliation"])
         + cutoff_risks(data["revenue"])
-        + future_dated(data["future_dated"], as_of)
         + duplicate_orders(data["orders"], period_start)
         + amount_outliers(data["shipped_items"], data["category_stats"])
         + refund_exceeds_revenue(data["refunds"])

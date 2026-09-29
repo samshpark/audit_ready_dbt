@@ -29,12 +29,14 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
-* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends synthetic orders daily — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable. ~23% of orders start as genuinely unshipped (`Processing`) and are rolled forward on later runs (shipped, still pending, or aged out to `cancelled`), so recognized revenue and cut-off risk stay realistic instead of every order shipping within 48 hours.
+* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Creates each business date's synthetic orders — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — in separate `incr_*.parquet` files, keeping the BigQuery source layer immutable.
+    - **Event-driven lifecycle**: every order has a fixed plan derived from its `order_id` (refund type, shipping delay, transit and return times, and for ~23% of orders a backlog that later ships or is cancelled). Each run advances every synthetic order to the current time and writes **only events that have already happened** — an order stays `Processing` until its planned shipment arrives, then moves to `Shipped`, `Complete`, and (if planned) `Returned` on later runs. Nothing is ever dated in the future, so revenue is never recognized ahead of shipment.
+    - **Idempotent and reproducible**: a date that already has orders is skipped, so Airflow catch-up runs and retries never duplicate a day; creation is seeded by date, so `--reset --backfill-from 2025-06-01` rebuilds the same orders on any machine. Covered by pytest (📂 `scripts/tests/`).
 * **AWS Source Layer** (📂 `scripts/load_to_s3_athena.py`): Publishes the same Parquet files to **S3** and registers them as **Glue Data Catalog** external tables (one Glue database per dbt source), so the Athena target reads identical source data. Rewrites nanosecond timestamps to microseconds on upload (Athena's Parquet reader rejects ns); `--source incremental` republishes only the daily files.
 * **BigQuery Source Layer** (📂 `scripts/load_to_bigquery.py`): Loads the same Parquet files into BigQuery for the weekly cross-warehouse parity run. Each table is dropped and recreated, which restarts the BigQuery sandbox's 60-day table expiry. Both loaders share one source definition and timestamp handling (📂 `scripts/source_files.py`).
 * **Local Data Lake**:
     - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
-    - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py`, then updated automatically by the Airflow pipeline.
+    - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01`, then updated automatically by the Airflow pipeline.
 * **Seeds** (`seeds/`):
     - 📂 `seeds/audit_materiality_thresholds.csv` — CPA-defined audit risk tier and materiality threshold per product category (lookup table)
     - 📂 `seeds/chart_of_accounts.csv` — GL accounts with account type and normal balance
@@ -149,7 +151,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 * **File**: 📂 `dags/dbt_incremental_pipeline.py`
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
 * **Pipeline**: after step 1 the DAG forks into a local **DuckDB branch** (feeds the Tableau exports) and an **AWS branch** (the production Athena warehouse and the journal-entry export).
-    1. `generate_incremental_data` — Appends ~15 synthetic orders to `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet`
+    1. `generate_incremental_data` — Creates the business date's (`ds`) synthetic orders in `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet` — and advances every synthetic order's lifecycle to the current time
     2. `dbt_source_freshness` — Checks `incr_orders` / `incr_order_items` freshness (warn after 30h, error after 54h, sized to the daily cadence). Placed right after the step that just wrote today's data, so it always passes when the DAG runs at all — it demonstrates the mechanism rather than catching a real failure mode, since the one failure that matters here (the host machine being off) leaves nothing running to report it. See the task's `doc_md` for the full caveat.
     3. `dbt_seed` — Reloads the `audit_materiality_thresholds`, `chart_of_accounts`, and `journal_entry_rules` lookup tables so threshold or posting-rule changes take effect without manual intervention
     4. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
@@ -203,6 +205,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `tests/assert_fulfillment_lead_time_within_baseline.sql` — warns if the negative-lead-time rate rises well past its historical baseline
         - 📂 `tests/assert_journal_entries_balanced.sql` — every journal entry's debits equal its credits to the cent
         - 📂 `tests/assert_journal_entries_reconcile_to_marts.sql` — control totals: posted revenue ties to the item-level subledger, returns to `refund_reconciliation`, COGS to `inventory_fiscal_report`
+        - 📂 `tests/assert_no_future_dated_events.sql` — preventive control: no order, shipment, or return dated after the build runs; on the daily Athena branch a failure stops the build before any journal entry is posted
     
     * **Audit Exception Analyses** (`analyses/`) — ad-hoc audit queries compiled via `dbt compile`, using `{{ ref() }}` for table references. Copy the rendered SQL from `target/compiled/` to run directly against DuckDB:
         - 📂 `audit_inventory_exceptions.sql` — flags inventory equation imbalances (`audit_check_diff ≠ 0`), LCM write-down candidates, and slow-moving/obsolete stock
@@ -210,7 +213,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
         - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
         - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
-* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build. A separate job runs Ruff and the `lambdas/` pytest suite on Python 3.12 (the Lambda runtime).
+* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build. A separate job runs Ruff and the pytest suites (`lambdas/`, `scripts/`) on Python 3.12 (the Lambda runtime). dbt-core is pinned to the version used locally and in the Airflow image, and Slim CI only defers to a baseline built by the same dbt version — otherwise it falls back to a full build, since a newer dbt's manifest may not parse.
 
 ### 7. SQL Code Quality (SQLFluff)
 * **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
@@ -389,14 +392,13 @@ Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fis
 |---|---|---|
 | `RECONCILIATION_BREAK` | High | Master/sub-ledger breaks — orphan or missing sub-ledger, item-count variance, unexplained status variance (explained partial refunds/shipments are excluded) |
 | `CUTOFF_RISK` | Medium | Ordered and shipped in different months |
-| `FUTURE_DATED_SHIPMENT` | High | `shipped_at` later than the run time — revenue recognized for a shipment that hasn't happened |
 | `DUPLICATE_SUSPECT` | High | Same customer and amount within 10 minutes |
 | `AMOUNT_OUTLIER` | Seed risk tier | Item price above the category's Q3 + 3×IQR; severity comes from `audit_materiality_thresholds` |
 | `REFUND_EXCEEDS_REVENUE` | High | Refund larger than the order's gross revenue |
 
 * **Outputs** (`s3://audit-ready-dbt-reports-*/je-pipeline/period=<start>_<end>/`): `journal_entries.csv` (GL upload file), `journal_detail.csv` (support for every amount), `exceptions.csv`, `run_summary.json`. The bucket is versioned with `DeletionPolicy: Retain` — each period's export is a point-in-time record of what was posted, which the marts cannot provide because incremental merges and fixes keep changing history.
 * **Infrastructure as code** (📂 `lambdas/template.yaml`, deployed with AWS SAM): the function, its least-privilege execution role (Athena, Glue read, S3 read, write only to query results and the reports bucket), the reports bucket, and a 30-day log group. Deploys use a separate IAM user; the daily pipeline's user can only invoke the function.
-* **First-run finding**: On its first real run the `FUTURE_DATED_SHIPMENT` rule flagged orders whose `shipped_at` was set up to 48 hours *ahead* of generation time by `scripts/generate_daily_incremental.py` — meaning `revenue` was recognizing revenue for shipments that had not happened yet. Tracked as a separate fix: the generator will record lifecycle events only once they have happened, and a dbt test (`assert_no_future_dated_events`, error severity) will block the Athena build — and so the GL export — if a future-dated event ever reappears.
+* **First-run finding → detective to preventive control**: On its first real run, a `FUTURE_DATED_SHIPMENT` exception rule flagged orders whose `shipped_at` had been written up to 48 hours *ahead* of generation time by the synthetic-data generator — `revenue` was recognizing revenue for shipments that had not happened yet (139 future-dated events in the marts). The root cause was fixed in the generator (see [§3.1](#1-ingestion--synthetic-data-generation)), and the check moved from the Lambda, which could only report it *after* posting, into an error-severity dbt test (`assert_no_future_dated_events`) that fails the Athena build and so blocks the GL export.
 * **Verification**: [`docs/je_pipeline_verification.md`](docs/je_pipeline_verification.md).
 
 ### 6. Dashboard Showcase
@@ -481,7 +483,7 @@ From Step 7 onwards, you can either run the pipeline **manually** or let **Airfl
 
 #### Option A — Manual
 ```bash
-python scripts/generate_daily_incremental.py  # initialize incr_*.parquet
+python scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01  # initialize incr_*.parquet
 dbt seed                                       # load audit_materiality_thresholds
 dbt snapshot                                   # build scd_products price history
 dbt run                                        # execute all models

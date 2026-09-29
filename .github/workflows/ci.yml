@@ -19,7 +19,8 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install sqlfluff sqlfluff-templater-dbt dbt-duckdb==1.10.0
+        # dbt-core pinned to match local and the Airflow image; unpinned, pip resolves a newer minor.
+        run: pip install sqlfluff sqlfluff-templater-dbt dbt-core==1.10.20 dbt-duckdb==1.10.0
 
       - name: Create CI profile
         run: |
@@ -38,23 +39,23 @@ jobs:
       - name: SQLFluff lint
         run: sqlfluff lint models/ analyses/ tests/
 
-  je-pipeline-test:
-    name: JE Pipeline Unit Tests
+  python-test:
+    name: Python Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          # Matches the Lambda runtime.
+          # Matches the Lambda runtime; the generator tests run on it too.
           python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install boto3 pytest ruff
+        run: pip install boto3 pandas pyarrow pytest ruff
 
       - name: Ruff
-        run: ruff check lambdas
+        run: ruff check lambdas scripts dags
 
       - name: Pytest
         run: pytest -q
@@ -71,7 +72,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install dbt-duckdb==1.10.0 pandas pyarrow
+        run: pip install dbt-core==1.10.20 dbt-duckdb==1.10.0 pandas pyarrow
 
       - name: Create CI profile
         run: |
@@ -177,6 +178,16 @@ jobs:
 
       - name: dbt build
         run: |
+          # A manifest written by a different dbt version may not be readable by
+          # this one (dbt fails to parse it), so only defer to a same-version baseline.
+          if [ "$BASELINE_AVAILABLE" = "true" ]; then
+            BASE_VER=$(python -c "import json; print(json.load(open('prod-manifest/manifest.json'))['metadata']['dbt_version'])")
+            CUR_VER=$(python -c "import importlib.metadata as m; print(m.version('dbt-core'))")
+            if [ "$BASE_VER" != "$CUR_VER" ]; then
+              echo "Baseline built with dbt $BASE_VER but running $CUR_VER; falling back to a full build."
+              BASELINE_AVAILABLE=false
+            fi
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ] && [ "$BASELINE_AVAILABLE" = "true" ]; then
             echo "Slim CI: building state:modified+ against main's last successful state"
             dbt build --select "state:modified+" --defer --state prod-manifest --profiles-dir . --target dev

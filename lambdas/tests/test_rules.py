@@ -40,15 +40,6 @@ def test_cutoff_risk():
     assert [e["reference"] for e in rules.cutoff_risks(rows)] == ["b"]
 
 
-def test_future_dated_shipment():
-    as_of = datetime(2026, 9, 29, 12)
-    rows = [
-        {"order_id": "past", "shipped_at": datetime(2026, 9, 29, 11), "recognized_revenue": 1.0},
-        {"order_id": "future", "shipped_at": datetime(2026, 9, 30, 8), "recognized_revenue": 1.0},
-    ]
-    assert [e["reference"] for e in rules.future_dated(rows, as_of)] == ["future"]
-
-
 def _order(order_id, user, amount, created):
     return {"order_id": order_id, "user_id": user, "gross_revenue": amount, "created_at": created}
 
