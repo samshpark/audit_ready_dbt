@@ -6,6 +6,20 @@
     double
 {% endmacro %}
 
+{% macro duckdb__alter_column_type(relation, column_name, new_column_type) %}
+    {#- dbt's default changes a column type in four statements (add temp
+       column, copy, drop, rename), which an incremental model with
+       on_schema_change='sync_all_columns' then follows with a MERGE in the
+       same transaction. DuckDB rejects that commit ("another transaction has
+       altered this table"), so an existing incremental table could never have
+       a column type changed in place. DuckDB supports the change as a single
+       ALTER COLUMN ... TYPE, which commits cleanly alongside the MERGE. -#}
+    {% call statement('alter_column_type') %}
+        alter table {{ relation.render() }}
+        alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
+    {% endcall %}
+{% endmacro %}
+
 {% macro set_utc_session_timezone() %}
     {#- Source timestamps are UTC (TIMESTAMPTZ in DuckDB), and DuckDB converts
        them to the session time zone -- the host machine's -- when staging casts
