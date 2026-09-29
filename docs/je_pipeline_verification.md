@@ -61,6 +61,10 @@ StatusCode 200, no `FunctionError`. `run_summary.json`:
 }
 ```
 
+(The 43 `FUTURE_DATED_SHIPMENT` exceptions were a real defect in the
+synthetic-data generator, since resolved — see section 4. After the fix,
+the same function run for 2026-09-01..28 reports only `CUTOFF_RISK`.)
+
 Net movement is consistent with double entry: AR 95,274.00 = revenue
 125,331.00 − returns 30,057.00, and COGS equals the inventory relief.
 
@@ -95,11 +99,14 @@ was granted on this one function.
   header (the column list is shared by the SQL and the CSV writer). Because
   the bucket is versioned, the original 0-byte export is still retained as a
   prior version of the object.
-- **Future-dated shipments (open).** `FUTURE_DATED_SHIPMENT` flags orders
-  whose `shipped_at` is later than the run time.
-  `scripts/generate_daily_incremental.py` assigns `shipped_at` up to 48 hours
-  after generation, so `revenue` recognizes revenue before shipment. The
-  exception report is doing its job. Tracked as a separate change: fix the
-  generator to record lifecycle events only once they have happened, and add
-  an error-severity dbt test so a future-dated event blocks the build before
-  anything is posted.
+- **Future-dated shipments — resolved.** The `FUTURE_DATED_SHIPMENT`
+  exception rule flagged orders whose `shipped_at` was later than the run
+  time: `scripts/generate_daily_incremental.py` wrote shipments, deliveries,
+  and returns up to days ahead of generation, so `revenue` recognized revenue
+  before shipment. Fixed at the source by making the generator event-driven
+  (only events that have already happened are written), and the check was
+  moved from the Lambda into an error-severity dbt test,
+  `assert_no_future_dated_events`, which fails the Athena build before
+  `export_journal_entries` can post. Against the old data the test failed
+  with 139 future-dated events; after regenerating, it passes on DuckDB,
+  BigQuery, and Athena, and cross-warehouse parity still holds.
