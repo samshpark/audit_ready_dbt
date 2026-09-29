@@ -4,7 +4,7 @@ with source as (
 
 renamed as (
     select
-        cast(id as string) as user_id,
+        cast(id as {{ dbt.type_string() }}) as user_id,
         lower(first_name) as first_name,
         lower(last_name) as last_name,
         lower(email) as email,

@@ -4,11 +4,11 @@ with source as (
 
 renamed as (
     select
-        cast(id as string) as order_item_id,
-        cast(order_id as string) as order_id,
-        cast(user_id as string) as user_id,
-        cast(product_id as string) as product_id,
-        cast(inventory_item_id as string) as inventory_item_id,
+        cast(id as {{ dbt.type_string() }}) as order_item_id,
+        cast(order_id as {{ dbt.type_string() }}) as order_id,
+        cast(user_id as {{ dbt.type_string() }}) as user_id,
+        cast(product_id as {{ dbt.type_string() }}) as product_id,
+        cast(inventory_item_id as {{ dbt.type_string() }}) as inventory_item_id,
         lower(status) as order_item_status,
         cast(sale_price as {{ dbt.type_float() }}) as sale_price,
         cast(created_at as timestamp) as created_at,

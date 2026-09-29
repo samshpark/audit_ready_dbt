@@ -24,6 +24,9 @@ clean-targets: # directories to be removed by `dbt clean`
 
 models:
   audit_ready_dbt:
+    # Athena-only: Hive tables cannot be merged into, so the incremental marts
+    # (incremental_strategy='merge') need Iceberg. Other adapters ignore this key.
+    +table_type: iceberg
     # Config indicated by + and applies to all files under models/example/
     staging:
       +materialized: view
@@ -55,6 +58,7 @@ vars:
 
 snapshots:
   audit_ready_dbt:
+    +table_type: iceberg
     +docs:
       node_color: "#F0B27A"
 
