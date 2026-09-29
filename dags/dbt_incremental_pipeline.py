@@ -5,7 +5,8 @@ Schedule: 09:00 UTC daily
 Pipeline — after step 1 the DAG forks into a local DuckDB branch (feeds the Tableau
 exports) and an AWS branch (the production Athena warehouse and the journal-entry export):
 
-  1. generate_incremental_data  — append synthetic orders for today to the parquet sources
+  1. generate_incremental_data  — create the business date's (`ds`) synthetic orders and advance
+                                  every synthetic order's lifecycle to the current time
 
   DuckDB branch
   2. dbt_source_freshness       — check incr_* source freshness (see caveat on the task below —
@@ -48,16 +49,20 @@ AWS_REGION = "us-east-1"
 sys.path.insert(0, os.path.join(DBT_PROJECT_DIR, "scripts"))
 
 
-def run_generate_incremental(**context) -> None:
+def run_generate_incremental(ds: str, **context) -> None:
     script_path = os.path.join(DBT_PROJECT_DIR, "scripts", "generate_daily_incremental.py")
     if not os.path.exists(script_path):
         raise FileNotFoundError(
             f"generate_daily_incremental.py not found at {script_path}. "
             "Ensure the scripts/ directory is present and mounted correctly in docker-compose.yml."
         )
-    from generate_daily_incremental import generate_today_orders
+    from datetime import date
 
-    generate_today_orders(project_dir=DBT_PROJECT_DIR)
+    from generate_daily_incremental import generate
+
+    # ds is the business date the run covers (yesterday, for a scheduled run) --
+    # the same date export_journal_entries posts.
+    generate(project_dir=DBT_PROJECT_DIR, business_dates=[date.fromisoformat(ds)])
 
 
 def run_je_pipeline(ds: str, **context) -> None:
@@ -104,10 +109,12 @@ with DAG(
         task_id="generate_incremental_data",
         python_callable=run_generate_incremental,
         doc_md=(
-            "Append synthetic orders for today to incr_order_items.parquet, "
-            "incr_orders.parquet, and incr_inventory_items.parquet. Daily count "
-            "starts at ~15 and grows ~5%/month from the BigQuery ingestion cutoff, "
-            "continuing that source's own growth trend instead of flatlining."
+            "Create the business date's (`ds`) synthetic orders in incr_orders.parquet, "
+            "incr_order_items.parquet, and incr_inventory_items.parquet -- ~15/day, growing "
+            "~5%/month from the BigQuery ingestion cutoff -- then advance every synthetic order's "
+            "lifecycle (shipment, delivery, return, backlog cancellation) to the current time. "
+            "Only events that have already happened are written, and a date that already has "
+            "orders is skipped, so catch-up runs and retries never duplicate a day."
         ),
     )
 
