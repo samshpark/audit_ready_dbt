@@ -21,20 +21,29 @@ the [README](../README.md#2-high-performance-local-development).
 
 ## Result
 
-All three builds: 224 pass / 0 error. All ten metrics match.
+Airflow run, 2026-09-29: all three builds 226 pass / 0 error; all ten metrics match.
+
+![check_parity output: ten metrics side by side for DuckDB, BigQuery, and Athena](../images/parity_check_output.png)
+
+*`check_parity` task log from that run*
 
 | Metric | DuckDB | BigQuery | Athena |
 |---|---|---|---|
-| `inventory_fiscal_report.period_cogs` | 544,375.23 | 544,375.23 | 544,375.23 |
-| `journal_entries.COGS.debits` | 544,376.73 | 544,376.73 | 544,376.73 |
-| `journal_entries.RET.debits` | 320,250.30 | 320,250.30 | 320,250.30 |
-| `journal_entries.REV.debits` | 2,038,244.25 | 2,038,244.25 | 2,038,244.25 |
-| `journal_entries.rows` | 8,022 | 8,022 | 8,022 |
-| `journal_entry_lines.rows` | 33,012 | 33,012 | 33,012 |
+| `inventory_fiscal_report.period_cogs` | 550,955.99 | 550,955.99 | 550,955.99 |
+| `journal_entries.COGS.debits` | 550,957.49 | 550,957.49 | 550,957.49 |
+| `journal_entries.RET.debits` | 315,824.30 | 315,824.30 | 315,824.30 |
+| `journal_entries.REV.debits` | 2,113,806.25 | 2,113,806.25 | 2,113,806.25 |
+| `journal_entries.rows` | 8,142 | 8,142 | 8,142 |
+| `journal_entry_lines.rows` | 33,837 | 33,837 | 33,837 |
 | `order_reconciliation.breaks` | 0 | 0 | 0 |
-| `refund_reconciliation.refund_amount` | 320,250.30 | 320,250.30 | 320,250.30 |
-| `revenue.cutoff_risk_orders` | 534 | 534 | 534 |
-| `revenue.recognized_revenue` | 2,038,244.25 | 2,038,244.25 | 2,038,244.25 |
+| `refund_reconciliation.refund_amount` | 315,824.30 | 315,824.30 | 315,824.30 |
+| `revenue.cutoff_risk_orders` | 570 | 570 | 570 |
+| `revenue.recognized_revenue` | 2,113,806.25 | 2,113,806.25 | 2,113,806.25 |
+
+The first passing comparison, run locally earlier the same day on the
+pre-fix synthetic data (224 pass per build), matched in the same way:
+recognized revenue 2,038,244.25, COGS debits 544,376.73, and 8,022 journal
+entries on all three warehouses.
 
 ## Defects found by the first run
 

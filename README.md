@@ -51,6 +51,8 @@ I adopted a hybrid architecture to balance development efficiency with productio
     - **Snowflake run results**: Verified end-to-end on 2026-09-13 — `dbt build --target snowflake` against a live Snowflake warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/snowflake_prod_verification.md`](docs/snowflake_prod_verification.md) for details.
       ![Snowflake databases and schemas built by dbt](./images/snowflake_dbt_build.png)
     - **AWS Athena run results**: Verified end-to-end on 2026-09-29 — `dbt build --target athena` against **S3 + Glue Data Catalog + Athena** completed with zero errors (166 pass / 22 success / 1 expected warn), identical to BigQuery and Snowflake. Incremental marts are stored as **Iceberg** tables so `merge` works on Athena; a follow-up incremental run confirmed rows were upserted without duplicates. Access uses a dedicated least-privilege IAM user scoped to the project's S3 buckets. See [`docs/athena_prod_verification.md`](docs/athena_prod_verification.md) for details.
+      ![Athena query editor: Glue databases built by dbt and a journal_entries query result](./images/athena_query_journal_entries.png)
+      *Athena query editor — the tables dbt built in `audit_ready_dbt_finance` (left), and one day's journal entries: three balanced debit/credit pairs (revenue, returns, COGS) with the number of order/item lines behind each*
     - **Cross-warehouse parity (automated)**: Passing tests on every warehouse doesn't prove the *numbers* agree. The weekly `cross_warehouse_parity` DAG loads identical sources into DuckDB, BigQuery, and Athena, fully rebuilds each, and compares journal-entry debits, row counts, and headline mart totals to the cent. Its first run caught two real DuckDB-only defects the per-warehouse test suites had missed — 32-bit float currency columns and host-time-zone-dependent posting dates — both fixed (see the macros table below). See [`docs/cross_warehouse_parity.md`](docs/cross_warehouse_parity.md).
 
 ### 3. Modular Transformation (dbt)
@@ -170,13 +172,16 @@ LEFT JOIN {{ ref('scd_products') }} scd
 
 * **Weekly parity check** (📂 `dags/cross_warehouse_parity.py`, Sundays 12:00 UTC or manual): reloads all sources into BigQuery and Athena, runs `dbt build --full-refresh` on DuckDB (a separate `parity.duckdb`), BigQuery, and Athena in parallel, then `scripts/check_warehouse_parity.py` compares ten metrics across all three via `dbt show` — so `ref()` resolves per warehouse and no engine-specific SQL is needed — and fails on any difference. Snowflake is excluded because it ran on a 30-day trial.
 
+  ![Airflow grid for cross_warehouse_parity: loads, three parallel builds, and the parity check all succeeding](./images/airflow_parity_dag.png)
+  *`cross_warehouse_parity` — BigQuery and Athena source loads, full-refresh builds on DuckDB, BigQuery, and Athena in parallel, then `check_parity`*
+
 ![Airflow DAG Overview](./images/airflow_dag_overview.png)
 
-*DAG list — `dbt_daily_incremental` active and scheduled daily at 09:00 UTC*
+*DAG list — the daily pipeline and the weekly parity check*
 
 ![Airflow DAG Runs](./images/airflow_dag_runs.png)
 
-*Grid view — all 8 tasks completing successfully across daily runs*
+*Grid view — daily runs succeeding; the three AWS-branch tasks appear from the latest runs*
 
 ### 5. SCD Type 2 Snapshot (Product Price Tracking)
 * **File**: 📂 `snapshots/scd_products.sql`
@@ -187,7 +192,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 6. Quality Control
 * **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
 ![dbt Test Results](./images/test_results.png)
-> The one `WARN` above is `assert_fulfillment_lead_time_within_baseline` — expected, not a failure. It's a warn-severity test that flags when the negative-lead-time rate (a known source-data defect, see below) rises well past its historical baseline. It's designed to warn rather than block the build, since the underlying defect can't be fixed at the transform layer.
+> All 200 tests pass. `assert_fulfillment_lead_time_within_baseline` is intentionally warn-severity: it flags a known source-data defect (see below) that can't be fixed at the transform layer, so it warns rather than blocks — and currently doesn't fire.
 
     * **Model Schema Tests** (column-level constraints & descriptions):
         - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
@@ -214,6 +219,9 @@ LEFT JOIN {{ ref('scd_products') }} scd
         - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
         - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
 * **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build. A separate job runs Ruff and the pytest suites (`lambdas/`, `scripts/`) on Python 3.12 (the Lambda runtime). dbt-core is pinned to the version used locally and in the Airflow image, and Slim CI only defers to a baseline built by the same dbt version — otherwise it falls back to a full build, since a newer dbt's manifest may not parse.
+
+  ![GitHub Actions CI: SQLFluff Lint, dbt Test, and Python Unit Tests all passing](./images/github_actions_ci.png)
+  *CI on `main` — SQL lint, the dbt build, and the Python unit tests (Lambda + generator) run as three parallel jobs. The two artifacts are this build's `manifest.json` and `dev.duckdb`, which the next PR's Slim CI defers to.*
 
 ### 7. SQL Code Quality (SQLFluff)
 * **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
@@ -397,7 +405,13 @@ Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fis
 | `REFUND_EXCEEDS_REVENUE` | High | Refund larger than the order's gross revenue |
 
 * **Outputs** (`s3://audit-ready-dbt-reports-*/je-pipeline/period=<start>_<end>/`): `journal_entries.csv` (GL upload file), `journal_detail.csv` (support for every amount), `exceptions.csv`, `run_summary.json`. The bucket is versioned with `DeletionPolicy: Retain` — each period's export is a point-in-time record of what was posted, which the marts cannot provide because incremental merges and fixes keep changing history.
+
+  ![S3 reports bucket: one business day's journal-entry export files](./images/s3_je_pipeline_outputs.png)
+  *`je-pipeline/period=2026-09-29_2026-09-29/`, written by the daily DAG's `export_journal_entries` — the GL upload file (three balanced entries: revenue, returns, COGS), the order/item-level support, the exception report (header only: no exceptions that day), and the run summary*
 * **Infrastructure as code** (📂 `lambdas/template.yaml`, deployed with AWS SAM): the function, its least-privilege execution role (Athena, Glue read, S3 read, write only to query results and the reports bucket), the reports bucket, and a 30-day log group. Deploys use a separate IAM user; the daily pipeline's user can only invoke the function.
+
+  ![CloudFormation stack audit-ready-je-pipeline with its four resources](./images/cloudformation_stack_resources.png)
+  *CloudFormation stack `audit-ready-je-pipeline`, deployed by SAM from `lambdas/template.yaml` — the Lambda function, its execution role, the log group, and the versioned reports bucket. Code redeploys update only the function; the role, bucket, and log group are untouched.*
 * **First-run finding → detective to preventive control**: On its first real run, a `FUTURE_DATED_SHIPMENT` exception rule flagged orders whose `shipped_at` had been written up to 48 hours *ahead* of generation time by the synthetic-data generator — `revenue` was recognizing revenue for shipments that had not happened yet (139 future-dated events in the marts). The root cause was fixed in the generator (see [§3.1](#1-ingestion--synthetic-data-generation)), and the check moved from the Lambda, which could only report it *after* posting, into an error-severity dbt test (`assert_no_future_dated_events`) that fails the Athena build and so blocks the GL export.
 * **Verification**: [`docs/je_pipeline_verification.md`](docs/je_pipeline_verification.md).
 
