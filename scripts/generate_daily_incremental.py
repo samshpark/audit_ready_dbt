@@ -117,6 +117,17 @@ def lifecycle_plan(order_id: int) -> LifecyclePlan:
     )
 
 
+def _text(value) -> str:
+    """A string attribute, with missing values as ''.
+
+    Matches the BigQuery-sourced inventory, which stores unknown values as empty
+    strings. `value or ""` is not enough: pandas 3 reads missing strings as NaN,
+    which is truthy, so it would leak through as NULL and split one product into
+    two groups downstream.
+    """
+    return "" if value is None or pd.isna(value) else value
+
+
 def _growth_adjusted_order_count(business_date: date) -> int:
     months_elapsed = max(0.0, (business_date - _ANCHOR_DATE).days / 30)
     return max(1, round(_ANCHOR_DAILY_ORDERS * (1 + _MONTHLY_GROWTH_RATE) ** months_elapsed))
@@ -157,20 +168,18 @@ def create_orders(
         for _ in range(n_items):
             product_id = rng.choice(product_ids)
             prod = products[product_id]
-            # Use '' for missing string attrs to match BigQuery-sourced inventory_items,
-            # where unknown values are stored as empty strings, not NULLs.
             inv.append(
                 {
                     "id": ids["inv"],
                     "product_id": product_id,
                     "created_at": created_at - timedelta(days=rng.randint(7, 60)),
                     "cost": prod.get("cost"),
-                    "product_category": prod.get("category") or "",
-                    "product_name": prod.get("name") or "",
-                    "product_brand": prod.get("brand") or "",
+                    "product_category": _text(prod.get("category")),
+                    "product_name": _text(prod.get("name")),
+                    "product_brand": _text(prod.get("brand")),
                     "product_retail_price": prod.get("retail_price"),
-                    "product_department": prod.get("department") or "",
-                    "product_sku": prod.get("sku") or "",
+                    "product_department": _text(prod.get("department")),
+                    "product_sku": _text(prod.get("sku")),
                     "product_distribution_center_id": prod.get("distribution_center_id"),
                 }
             )
