@@ -11,6 +11,7 @@ credentials/
 !pyrightconfig.json
 !docs/bigquery_prod_run_results.raw.json
 !docs/snowflake_prod_run_results.raw.json
+!docs/athena_prod_run_results.raw.json
 
 .user.yml
 profiles.yml

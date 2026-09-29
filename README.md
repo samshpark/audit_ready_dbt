@@ -30,6 +30,7 @@ I adopted a hybrid architecture to balance development efficiency with productio
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
 * **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Appends synthetic orders daily — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — to separate `incr_*.parquet` files, keeping the BigQuery source layer immutable. ~23% of orders start as genuinely unshipped (`Processing`) and are rolled forward on later runs (shipped, still pending, or aged out to `cancelled`), so recognized revenue and cut-off risk stay realistic instead of every order shipping within 48 hours.
+* **AWS Source Layer** (📂 `scripts/load_to_s3_athena.py`): Publishes the same Parquet files to **S3** and registers them as **Glue Data Catalog** external tables (one Glue database per dbt source), so the Athena target reads identical source data. Rewrites nanosecond timestamps to microseconds on upload (Athena's Parquet reader rejects ns); `--source incremental` republishes only the daily files.
 * **Local Data Lake**:
     - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
     - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py`, then updated automatically by the Airflow pipeline.
@@ -38,12 +39,13 @@ I adopted a hybrid architecture to balance development efficiency with productio
 
 ### 2. High-Performance Local Development
 * **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
-* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery** or **Snowflake** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than warehouse-specific syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic, `string_agg(... order by ...)`), so the same SQL runs unmodified across all three.
+* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery**, **Snowflake**, or **AWS Athena** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.type_string()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than warehouse-specific syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic, `string_agg(... order by ...)`), so the same SQL runs unmodified across all four.
     - **BigQuery run results**: Verified end-to-end on 2026-09-12 — `dbt build --target prod` against the live BigQuery warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/bigquery_prod_verification.md`](docs/bigquery_prod_verification.md) for details.
       ![BigQuery Datasets built by dbt](./images/BigQuery_dbt_build.png)
       ![BigQuery staging, intermediate, mart, and snapshot tables built by dbt](./images/BigQuery_dbt_build_stg_int_mart_snap.png)
     - **Snowflake run results**: Verified end-to-end on 2026-09-13 — `dbt build --target snowflake` against a live Snowflake warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/snowflake_prod_verification.md`](docs/snowflake_prod_verification.md) for details.
       ![Snowflake databases and schemas built by dbt](./images/snowflake_dbt_build.png)
+    - **AWS Athena run results**: Verified end-to-end on 2026-09-29 — `dbt build --target athena` against **S3 + Glue Data Catalog + Athena** completed with zero errors (166 pass / 22 success / 1 expected warn), identical to BigQuery and Snowflake. Incremental marts are stored as **Iceberg** tables so `merge` works on Athena; a follow-up incremental run confirmed rows were upserted without duplicates. Access uses a dedicated least-privilege IAM user scoped to the project's S3 buckets. See [`docs/athena_prod_verification.md`](docs/athena_prod_verification.md) for details.
 
 ### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
@@ -124,7 +126,7 @@ Repeated SQL expressions are extracted into reusable macros to enforce DRY princ
 | `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE`, capped at `current_date` so the year still in progress is evaluated as of today rather than a not-yet-elapsed December 31st |
 | `datediff_days(start, end)` | `int_inventory_items_joined` (×2), `inventory_fiscal_report` (×1) | Calculates day difference between two date columns via `dbt.datediff()`, used for inventory aging/velocity buckets and fiscal year-end day counts |
 | `within_incremental_lookback(column)` | `order_reconciliation`, `revenue`, `order_item_revenue` (×3 each), `refund_reconciliation` (×2) | Returns whether a timestamp column falls within the incremental lookback window (`var("incremental_lookback_days")`), used to build each incremental mart's `is_incremental()` filter |
-| `string_agg_distinct(column)` | `int_order_items_aggregated` (×1) | Concatenates a column's distinct values, ordered — dispatches to `listagg(distinct col, sep) within group (order by col)` on Snowflake (no `string_agg(... order by ...)` equivalent there) and `string_agg(distinct col order by col)` elsewhere |
+| `string_agg_distinct(column)` | `int_order_items_aggregated` (×1) | Concatenates a column's distinct values, ordered — dispatches to `listagg(distinct col, sep) within group (order by col)` on Snowflake (no `string_agg(... order by ...)` equivalent there), `array_join(array_sort(array_distinct(array_agg(col))), sep)` on Athena (Trino has neither form), and `string_agg(distinct col order by col)` elsewhere |
 
 ```sql
 -- Example: fiscal_year_end macro in use
