@@ -18,4 +18,8 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["dags", "scripts"]
+known-first-party = ["dags", "scripts", "je_pipeline"]
+
+[tool.pytest.ini_options]
+testpaths = ["lambdas/tests"]
+pythonpath = ["lambdas"]

@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  audit-ready-dbt journal-entry export and exception pipeline. Invoked by the
+  dbt_daily_incremental Airflow DAG after `dbt build --target athena` succeeds;
+  reads the journal_entries mart on Athena and writes GL upload files and
+  exception reports to S3.
+
+Parameters:
+  RawBucket:
+    Type: String
+    Default: audit-ready-dbt-raw-sam2026
+    Description: Source-layer bucket (Glue external tables the staging views read)
+  AthenaBucket:
+    Type: String
+    Default: audit-ready-dbt-athena-sam2026
+    Description: dbt model data (tables/) and Athena query results (query-results/)
+  ReportsBucketName:
+    Type: String
+    Default: audit-ready-dbt-reports-sam2026
+    Description: Output bucket for journal-entry exports and exception reports
+
+Resources:
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain  # exported journal entries are audit evidence
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref ReportsBucketName
+      VersioningConfiguration:
+        Status: Enabled  # an overwritten period export stays recoverable
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  JePipelineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: audit-ready-je-pipeline
+      CodeUri: .
+      Handler: je_pipeline.handler.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 300
+      Environment:
+        Variables:
+          ATHENA_OUTPUT: !Sub "s3://${AthenaBucket}/query-results/"
+          ATHENA_WORKGROUP: primary
+          OUTPUT_BUCKET: !Ref ReportsBucket
+          OUTPUT_PREFIX: je-pipeline
+      Policies:
+        - Statement:
+            - Sid: RunAthenaQueries
+              Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+                - athena:GetQueryResults
+              Resource: !Sub "arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/primary"
+            - Sid: ReadGlueCatalog
+              Effect: Allow
+              Action:
+                - glue:GetDatabase
+                - glue:GetDatabases
+                - glue:GetTable
+                - glue:GetTables
+                - glue:GetPartition
+                - glue:GetPartitions
+              Resource:
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/*"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/*"
+            - Sid: ReadWarehouseData
+              Effect: Allow
+              Action: [s3:GetObject, s3:ListBucket, s3:GetBucketLocation]
+              Resource:
+                - !Sub "arn:aws:s3:::${RawBucket}"
+                - !Sub "arn:aws:s3:::${RawBucket}/*"
+                - !Sub "arn:aws:s3:::${AthenaBucket}"
+                - !Sub "arn:aws:s3:::${AthenaBucket}/*"
+            - Sid: WriteQueryResults
+              Effect: Allow
+              Action: [s3:PutObject, s3:AbortMultipartUpload]
+              Resource: !Sub "arn:aws:s3:::${AthenaBucket}/query-results/*"
+            - Sid: WriteReports
+              Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub "${ReportsBucket.Arn}/*"
+
+  JePipelineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${JePipelineFunction}"
+      RetentionInDays: 30
+
+Outputs:
+  FunctionName:
+    Value: !Ref JePipelineFunction
+  ReportsBucket:
+    Value: !Ref ReportsBucket

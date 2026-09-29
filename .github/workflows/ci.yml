@@ -38,6 +38,27 @@ jobs:
       - name: SQLFluff lint
         run: sqlfluff lint models/ analyses/ tests/
 
+  je-pipeline-test:
+    name: JE Pipeline Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the Lambda runtime.
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install boto3 pytest ruff
+
+      - name: Ruff
+        run: ruff check lambdas
+
+      - name: Pytest
+        run: pytest -q
+
   dbt-test:
     name: dbt Test
     runs-on: ubuntu-latest

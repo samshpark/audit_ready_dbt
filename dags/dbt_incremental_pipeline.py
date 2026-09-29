@@ -2,12 +2,17 @@
 DAG: dbt_daily_incremental
 Schedule: 09:00 UTC daily
 
-Pipeline:
+Pipeline — after step 1 the DAG forks into a local DuckDB branch (feeds the Tableau
+exports) and an AWS branch (the production Athena warehouse and the journal-entry export):
+
   1. generate_incremental_data  — append synthetic orders for today to the parquet sources
+
+  DuckDB branch
   2. dbt_source_freshness       — check incr_* source freshness (see caveat on the task below —
                                   this always passes here, since it runs right after the step
                                   that just wrote today's data)
-  3. dbt_seed                   — reload audit_materiality_thresholds lookup table
+  3. dbt_seed                   — reload the audit_materiality_thresholds, chart_of_accounts, and
+                                  journal_entry_rules lookup tables
   4. dbt_run_snapshot           — refresh scd_products SCD Type 2 snapshot
   5. dbt_run_intermediate       — recreate all five intermediate views (safety net for view
                                   definitions; views already reflect current data without this)
@@ -15,9 +20,16 @@ Pipeline:
                                   refund_reconciliation, order_item_revenue (full-refresh instead on
                                   Sundays, to catch backdated corrections the lookback window can't
                                   see); full-refresh rebuild of inventory_fiscal_report,
-                                  inventory_sellthrough
+                                  inventory_sellthrough, journal_entry_lines, journal_entries
   7. dbt_test_incremental       — run dbt tests on all updated models to validate pipeline output
   8. export_for_tableau         — export mart tables to CSV for Tableau Public
+
+  AWS branch
+  a. upload_incremental_to_s3   — republish incr_*.parquet to S3 / Glue (Athena source layer)
+  b. dbt_build_athena           — dbt build on Athena: models + all tests, including the journal
+                                  balance and control-total reconciliation tests
+  c. export_journal_entries     — invoke the je_pipeline Lambda for the run's business date:
+                                  GL upload file, support detail, and exception report to S3
 """
 
 import os
@@ -30,6 +42,8 @@ from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
 DBT_PROJECT_DIR = os.environ.get("DBT_PROJECT_DIR", "/opt/airflow/dbt_project")
+JE_PIPELINE_FUNCTION = os.environ.get("JE_PIPELINE_FUNCTION", "audit-ready-je-pipeline")
+AWS_REGION = "us-east-1"
 
 sys.path.insert(0, os.path.join(DBT_PROJECT_DIR, "scripts"))
 
@@ -44,6 +58,22 @@ def run_generate_incremental(**context) -> None:
     from generate_daily_incremental import generate_today_orders
 
     generate_today_orders(project_dir=DBT_PROJECT_DIR)
+
+
+def run_je_pipeline(ds: str, **context) -> None:
+    """Invoke the Lambda synchronously for the business date and fail the task if it errors."""
+    import json
+
+    import boto3
+
+    response = boto3.client("lambda", region_name=AWS_REGION).invoke(
+        FunctionName=JE_PIPELINE_FUNCTION,
+        Payload=json.dumps({"start_date": ds}),
+    )
+    payload = response["Payload"].read().decode()
+    if response.get("FunctionError"):
+        raise RuntimeError(f"{JE_PIPELINE_FUNCTION} failed: {payload}")
+    print(payload)
 
 
 def run_export_for_tableau(**context) -> None:
@@ -105,13 +135,15 @@ with DAG(
         task_id="dbt_seed",
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
-            "dbt seed --select audit_materiality_thresholds --profiles-dir . --target dev --no-partial-parse"
+            "dbt seed --select audit_materiality_thresholds chart_of_accounts journal_entry_rules "
+            "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
         append_env=True,
         doc_md=(
-            "Reload the audit_materiality_thresholds lookup table from seeds/audit_materiality_thresholds.csv. "
-            "Runs daily so any threshold or risk-tier changes are applied without manual intervention."
+            "Reload the lookup seeds: audit_materiality_thresholds, plus chart_of_accounts and "
+            "journal_entry_rules for the journal-entry models. Runs daily so threshold, risk-tier, or "
+            "posting-rule changes are applied without manual intervention."
         ),
     )
 
@@ -151,7 +183,7 @@ with DAG(
         bash_command=(
             "cd $DBT_PROJECT_DIR && "
             "dbt run --select revenue order_reconciliation refund_reconciliation order_item_revenue "
-            "inventory_fiscal_report inventory_sellthrough "
+            "inventory_fiscal_report inventory_sellthrough journal_entry_lines journal_entries "
             "{% if dag_run.logical_date.weekday() == 6 %}--full-refresh{% endif %} "
             "--profiles-dir . --target dev --no-partial-parse"
         ),
@@ -159,7 +191,8 @@ with DAG(
         append_env=True,
         doc_md=(
             "Incrementally merge updated orders into the four order-level mart models. "
-            "inventory_fiscal_report and inventory_sellthrough are plain table materializations, "
+            "inventory_fiscal_report, inventory_sellthrough, and the two journal-entry models are plain "
+            "table materializations, "
             "so this fully rebuilds them each run rather than merging — cross-year LAG logic and "
             "the unit-level sell-through view both need complete recalculation, not a partial merge.\n\n"
             "On Sundays, `--full-refresh` is added so the four incremental models rebuild from "
@@ -178,7 +211,7 @@ with DAG(
             "int_order_items_unioned int_order_items_aggregated int_orders_joined "
             "int_inventory_items_joined int_inventory_items_unioned "
             "revenue order_reconciliation refund_reconciliation order_item_revenue "
-            "inventory_fiscal_report inventory_sellthrough "
+            "inventory_fiscal_report inventory_sellthrough journal_entry_lines journal_entries "
             "--profiles-dir . --target dev --no-partial-parse"
         ),
         env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
@@ -195,6 +228,48 @@ with DAG(
             "for use in Tableau Public."
         ),
     )
+
+    upload_to_s3 = BashOperator(
+        task_id="upload_incremental_to_s3",
+        bash_command="cd $DBT_PROJECT_DIR && python scripts/load_to_s3_athena.py --source incremental",
+        env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
+        append_env=True,
+        doc_md=(
+            "Republish today's incr_*.parquet to S3 and re-register the Glue tables, so the Athena "
+            "source layer matches the files the DuckDB branch reads."
+        ),
+    )
+
+    dbt_build_athena = BashOperator(
+        task_id="dbt_build_athena",
+        bash_command=(
+            "cd $DBT_PROJECT_DIR && "
+            "dbt build --target athena --target-path target_athena "
+            "{% if dag_run.logical_date.weekday() == 6 %}--full-refresh{% endif %} "
+            "--profiles-dir . --no-partial-parse"
+        ),
+        env={"DBT_PROJECT_DIR": DBT_PROJECT_DIR},
+        append_env=True,
+        doc_md=(
+            "Build and test every model on Athena (Iceberg merge for the incremental marts, "
+            "full refresh on Sundays as in the DuckDB branch). A failing test -- including "
+            "assert_journal_entries_balanced or assert_journal_entries_reconcile_to_marts -- stops "
+            "the branch before any journal entry is exported. Uses its own --target-path so it "
+            "never collides with the DuckDB branch's target/ artifacts."
+        ),
+    )
+
+    export_journal_entries = PythonOperator(
+        task_id="export_journal_entries",
+        python_callable=run_je_pipeline,
+        doc_md=(
+            "Invoke the je_pipeline Lambda for the run's business date (`ds`). It exports the "
+            "day's journal_entries as a GL upload CSV with order/item-level support, re-checks "
+            "debit = credit at the boundary, runs the exception rules, and writes everything to S3."
+        ),
+    )
+
+    generate_data >> upload_to_s3 >> dbt_build_athena >> export_journal_entries
 
     (
         generate_data

@@ -1,0 +1,6 @@
+account_code,account_name,account_type,normal_balance
+1200,Accounts Receivable,Asset,Debit
+1300,Inventory,Asset,Debit
+4000,Sales Revenue,Revenue,Credit
+4100,Sales Returns & Allowances,Contra-Revenue,Debit
+5000,Cost of Goods Sold,Expense,Debit

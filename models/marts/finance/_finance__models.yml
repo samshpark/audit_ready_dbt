@@ -383,3 +383,100 @@ models:
           - accepted_values:
               arguments:
                 values: ['NORMAL', 'SHIPPING_PENDING', 'POTENTIAL CUT-OFF RISK']
+
+  - name: journal_entry_lines
+    description: >-
+      Subledger support for every journal entry. Grain: one row per source
+      document -- order (REV), order item (RET), or inventory item (COGS).
+      Amounts are taken from the marts that own each recognition rule
+      (revenue, order_item_revenue, int_inventory_items_joined), so the GL
+      never re-derives accounting logic.
+    config:
+      tags: ['financial', 'audit_ready']
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - entry_type
+              - source_ref
+    columns:
+      - name: je_id
+        description: "Journal entry this line supports: JE-<posting_date>-<entry_type>."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('journal_entries')
+                field: je_id
+      - name: entry_type
+        description: "REV (revenue on shipment), RET (customer return), COGS (cost of goods shipped)."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['REV', 'RET', 'COGS']
+      - name: posting_date
+        description: "GL date: shipped_at for REV and COGS, returned_at for RET."
+        tests:
+          - not_null
+      - name: source_ref
+        description: "order_id (REV), order_item_id (RET), or inventory_item_id (COGS)."
+        tests:
+          - not_null
+      - name: amount
+        description: "Line amount in USD, rounded to cents."
+        tests:
+          - not_null
+
+  - name: journal_entries
+    description: >-
+      Summarized general-ledger postings. Grain: one row per journal entry
+      line -- each entry (posting date x entry type) is a debit line and a
+      credit line. Accounts are mapped via the journal_entry_rules seed and
+      named via chart_of_accounts. Balance and control-total integrity are
+      enforced by assert_journal_entries_balanced and
+      assert_journal_entries_reconcile_to_marts.
+    config:
+      tags: ['financial', 'audit_ready']
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - je_id
+              - line_number
+    columns:
+      - name: je_id
+        tests:
+          - not_null
+      - name: posting_date
+        tests:
+          - not_null
+      - name: entry_type
+        tests:
+          - not_null
+      - name: line_number
+        description: "1 = debit line, 2 = credit line."
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+                quote: false
+      - name: account_code
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('chart_of_accounts')
+                field: account_code
+      - name: account_name
+      - name: account_type
+      - name: debit_amount
+        tests:
+          - not_null
+      - name: credit_amount
+        tests:
+          - not_null
+      - name: support_line_count
+        description: "Number of journal_entry_lines rows summarized into this entry."
+      - name: description
+        description: "Posting narrative from the journal_entry_rules seed."

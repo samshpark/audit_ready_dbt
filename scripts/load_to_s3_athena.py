@@ -12,42 +12,25 @@ Layout:
     the schema dbt resolves source() to by default.
 
 Type handling:
-    incr_*.parquet are written by pandas with nanosecond timestamps, which
-    Athena's Parquet reader does not support. Every timestamp column is
-    rewritten at microsecond precision before upload.
+    Timestamps are rewritten at microsecond precision before upload (see
+    source_files.to_parquet_bytes).
 
 Usage:
     AWS_PROFILE=audit-ready-dbt python scripts/load_to_s3_athena.py
 """
 
 import argparse
-import io
 import sys
 import time
 
 import boto3
 import pyarrow as pa
-import pyarrow.parquet as pq
 from botocore.exceptions import ClientError
+from source_files import SOURCES, to_parquet_bytes
 
 REGION = "us-east-1"
 RAW_BUCKET = "audit-ready-dbt-raw-sam2026"
 ATHENA_RESULTS = "s3://audit-ready-dbt-athena-sam2026/query-results/"
-
-SOURCES = {
-    "thelook_ecommerce": [
-        "raw_orders",
-        "raw_order_items",
-        "raw_products",
-        "raw_users",
-        "raw_inventory_items",
-    ],
-    "incremental": [
-        "incr_orders",
-        "incr_order_items",
-        "incr_inventory_items",
-    ],
-}
 
 
 def athena_type(arrow_type: pa.DataType) -> str:
@@ -60,13 +43,6 @@ def athena_type(arrow_type: pa.DataType) -> str:
     if pa.types.is_string(arrow_type):
         return "string"
     raise ValueError(f"Unmapped Arrow type: {arrow_type}")
-
-
-def to_parquet_bytes(path: str) -> tuple:
-    table = pq.read_table(path)
-    buf = io.BytesIO()
-    pq.write_table(table, buf, coerce_timestamps="us", allow_truncated_timestamps=True)
-    return buf.getvalue(), table.schema
 
 
 def run_query(athena, sql: str) -> None:

@@ -55,3 +55,24 @@ macros:
       - name: column_name
         type: column reference
         description: The column whose distinct values are concatenated (e.g., 'order_item_status').
+
+  - name: duckdb__type_float
+    description: >
+      DuckDB implementation of dbt.type_float(). The default renders `float`, which DuckDB
+      treats as 32-bit REAL and which silently loses cents on currency columns; this returns
+      `double` so DuckDB matches the 64-bit float every other target uses. Found by the
+      cross_warehouse_parity DAG (COGS differed by 0.59 across 547 rounding-boundary items).
+
+  - name: duckdb__alter_column_type
+    description: >
+      DuckDB implementation of dbt's alter_column_type(), used when an incremental model with
+      on_schema_change='sync_all_columns' sees a column type change. dbt's default
+      (add / copy / drop / rename) followed by the MERGE in the same transaction fails to
+      commit on DuckDB; a single ALTER COLUMN ... TYPE does not. Found by Slim CI when the
+      duckdb__type_float fix changed incremental mart columns from FLOAT to DOUBLE.
+
+  - name: set_utc_session_timezone
+    description: >
+      on-run-start hook that pins DuckDB's session time zone to UTC. Without it, staging's
+      cast of TIMESTAMPTZ source columns to TIMESTAMP uses the host's local zone, shifting
+      posting dates and month-end cut-off classification. Renders nothing on other adapters.
