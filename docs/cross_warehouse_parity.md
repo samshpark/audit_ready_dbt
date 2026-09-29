@@ -2,7 +2,7 @@
 
 Evidence that the books agree **to the cent** on every warehouse — not just
 that each warehouse's test suite passes. Backs the Multi-Environment claim in
-the [README](../README.md#2-high-performance-local-development).
+the [architecture doc](architecture.md#2-high-performance-local-development).
 
 - **Date**: 2026-09-29
 - **How**: the `cross_warehouse_parity` DAG ([`dags/cross_warehouse_parity.py`](../dags/cross_warehouse_parity.py)),

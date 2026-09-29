@@ -2,7 +2,7 @@
 
 Evidence that the models compile and run correctly against a live Snowflake
 warehouse, not just DuckDB/BigQuery — supporting the Multi-Environment claim
-in the [README](../README.md#2-tech-stack--engineering-value).
+in the [architecture doc](architecture.md#2-high-performance-local-development).
 
 - **Date**: 2026-09-13
 - **Command**: `dbt build --target snowflake`
@@ -22,7 +22,7 @@ in the [README](../README.md#2-tech-stack--engineering-value).
 | **error** | **0** |
 
 The single `warn` is the expected `assert_fulfillment_lead_time_within_baseline`
-test (see README §6) — a known source-data defect the test is designed to
+test (see [Quality Control](architecture.md#6-quality-control)) — a known source-data defect the test is designed to
 flag, not a build failure.
 
 ## Snowflake-specific portability fix

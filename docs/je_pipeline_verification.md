@@ -2,7 +2,7 @@
 
 Evidence that the GL layer (dbt `journal_entries` + the `audit-ready-je-pipeline`
 Lambda) is deployed, posts amounts that tie to the marts, and runs end to end
-from Airflow. Backs README [§4.5](../README.md#5-general-ledger-posting--exception-pipeline-aws-lambda).
+from Airflow. Backs the [GL pipeline section](accounting_logic.md#5-general-ledger-posting--exception-pipeline-aws-lambda).
 
 - **Date**: 2026-09-29
 - **Deployed with**: `sam build && sam deploy` from `lambdas/`

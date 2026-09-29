@@ -1,555 +1,113 @@
-# Analytical Engineering Project
-**Financial Data Pipeline & Reconciliation: E-commerce Case Study**
-> **CPA's perspective on ensuring financial data integrity using the Modern Data Stack**
+# Audit-Ready dbt: Analytics Engineering Project
 
----
+A financial data pipeline built by a **CPA (Big 4, Accounting Advisory Manager)** that embeds the internal controls and reconciliation logic financial reporting depends on — revenue recognition, sub-ledger reconciliation, inventory valuation, and a balanced general ledger — directly into the dbt transformation layer.
 
-## 1. Project Overview
+**Data**: a referentially intact extract of the public [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) BigQuery dataset (~6.2K orders), extended daily by a synthetic-order generator that adds partial refunds, order backlogs, and returns — recording each event only once it has happened.
 
-A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** applying financial audit expertise to the modern data stack. The goal was to apply financial audit expertise directly to the modern data stack — not just build a pipeline, but embed the internal controls and reconciliation logic that a real audit would require.
+![dbt](https://img.shields.io/badge/dbt-1.10-FF694B?logo=dbt&logoColor=white)
+![MetricFlow](https://img.shields.io/badge/MetricFlow-FF694B?logo=dbt&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?logo=duckdb&logoColor=black)
+![BigQuery](https://img.shields.io/badge/BigQuery-4285F4?logo=googlebigquery&logoColor=white)
+![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?logo=snowflake&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-Athena%20%7C%20Lambda%20%7C%20S3-232F3E?logo=amazonwebservices&logoColor=white)
+![Iceberg](https://img.shields.io/badge/Apache%20Iceberg-4E8EE9?logo=apache&logoColor=white)
+![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![pandas](https://img.shields.io/badge/pandas-150458?logo=pandas&logoColor=white)
+![Tableau](https://img.shields.io/badge/Tableau-E97627?logo=tableau&logoColor=white)
 
-* **Data Sources**:
-  - [TheLook E-commerce](https://console.cloud.google.com/marketplace/product/bigquery-public-data/thelook-ecommerce) — a public BigQuery dataset simulating a fashion e-commerce business. `scripts/ingest_data.py` seeds from 1,000 random products, then pulls every order that touches them (plus each order's other line items) — snowballing via referential integrity to ~5.9K products / ~6.2K orders in the final extract.
-  - Airflow-generated synthetic incremental data — daily orders (starting ~15/day and growing ~5%/month, continuing the BigQuery source's own growth trend past its ingestion cutoff) including partial refund scenarios (15%), injected via `scripts/generate_daily_incremental.py`
-* **Objective**: Transform raw transactional logs into audit-ready financial marts with automated internal controls
-* **Core Value**: Bridge the gap between system logs and GAAP/IFRS standards by embedding reconciliation logic, revenue recognition, and inventory valuation directly into the transformation layer
+**[▶ Live dashboards on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)**
 
----
+## Architecture
 
-## 2. Tech Stack & Engineering Value
-* **Stack**: SQL, Python, dbt-core, DuckDB, BigQuery, Snowflake, **AWS (S3, Glue Data Catalog, Athena, Lambda, SAM/CloudFormation, IAM)**, Apache Airflow, Docker, Parquet, Iceberg, MetricFlow, SQLFluff, Ruff, pytest.
-* **Audit Trail**: Every model is documented with metadata to provide a clear path from raw data to final report — essential for financial audits.
-* **Cost-Efficiency**: By developing against a **Python-to-DuckDB** local pipeline instead of iterating directly against BigQuery, development-time warehouse compute costs are close to zero — BigQuery is only touched once, at ingestion.
-* **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
+```mermaid
+flowchart LR
+    TL["TheLook<br/>(BigQuery public data)"] -->|ingest_data.py| PQ[("Parquet<br/>raw + incremental")]
+    GEN["Synthetic order<br/>generator"] --> PQ
+    PQ --> DUCK["dbt on DuckDB<br/>(local dev)"]
+    PQ -->|"S3 + Glue"| ATH["dbt on Athena<br/>(production)"]
+    PQ --> BQ["dbt on BigQuery<br/>/ Snowflake"]
+    DUCK -->|CSV exports| TAB["Tableau Public"]
+    ATH --> LAM["Lambda<br/>JE export + exceptions"]
+    LAM --> RPT[("S3 reports<br/>versioned")]
+    DUCK -.-> PAR{"Weekly parity<br/>check"}
+    ATH -.-> PAR
+    BQ -.-> PAR
+```
 
----
+Airflow orchestrates generation, the DuckDB and Athena builds, and the Lambda call daily, plus the parity check weekly. → [Architecture in detail](docs/architecture.md)
 
-## 3. Hybrid Data Architecture
-I adopted a hybrid architecture to balance development efficiency with production scalability.
-
-### 1. Ingestion & Synthetic Data Generation
-* **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
-* **Airflow Daily Simulation** (📂 `scripts/generate_daily_incremental.py`): Creates each business date's synthetic orders — starting at ~15/day and growing ~5%/month from the BigQuery ingestion cutoff, so the incremental layer continues that source's own growth trend instead of flatlining — including partial refund scenarios (15%) — in separate `incr_*.parquet` files, keeping the BigQuery source layer immutable.
-    - **Event-driven lifecycle**: every order has a fixed plan derived from its `order_id` (refund type, shipping delay, transit and return times, and for ~23% of orders a backlog that later ships or is cancelled). Each run advances every synthetic order to the current time and writes **only events that have already happened** — an order stays `Processing` until its planned shipment arrives, then moves to `Shipped`, `Complete`, and (if planned) `Returned` on later runs. Nothing is ever dated in the future, so revenue is never recognized ahead of shipment.
-    - **Idempotent and reproducible**: a date that already has orders is skipped, so Airflow catch-up runs and retries never duplicate a day; creation is seeded by date, so `--reset --backfill-from 2025-06-01` rebuilds the same orders on any machine. Covered by pytest (📂 `scripts/tests/`).
-* **AWS Source Layer** (📂 `scripts/load_to_s3_athena.py`): Publishes the same Parquet files to **S3** and registers them as **Glue Data Catalog** external tables (one Glue database per dbt source), so the Athena target reads identical source data. Rewrites nanosecond timestamps to microseconds on upload (Athena's Parquet reader rejects ns); `--source incremental` republishes only the daily files.
-* **BigQuery Source Layer** (📂 `scripts/load_to_bigquery.py`): Loads the same Parquet files into BigQuery for the weekly cross-warehouse parity run. Each table is dropped and recreated, which restarts the BigQuery sandbox's 60-day table expiry. Both loaders share one source definition and timestamp handling (📂 `scripts/source_files.py`).
-* **Local Data Lake**:
-    - `data/raw_*.parquet` (5 files, ~4 MB) — BigQuery-sourced, read-only. **Tracked in git** for reviewer convenience; regenerate via `scripts/ingest_data.py` if needed.
-    - `data/incr_*.parquet` (3 files) — Airflow-generated daily incremental data. **Not tracked in git** (changes daily); initialize once via `scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01`, then updated automatically by the Airflow pipeline.
-* **Seeds** (`seeds/`):
-    - 📂 `seeds/audit_materiality_thresholds.csv` — CPA-defined audit risk tier and materiality threshold per product category (lookup table)
-    - 📂 `seeds/chart_of_accounts.csv` — GL accounts with account type and normal balance
-    - 📂 `seeds/journal_entry_rules.csv` — posting rules (debit / credit account per entry type), kept as data so accounting-policy changes are reviewed without touching SQL
-
-### 2. High-Performance Local Development
-* **Engine**: Powered by **DuckDB**, optimized for **Apple Silicon** to enable rapid iteration with zero cloud costs.
-* **Multi-Environment**: **dbt profiles** (`profiles.yml`) are configured to switch from local DuckDB to **BigQuery**, **Snowflake**, or **AWS Athena** with a single command. All models are written against dbt's cross-database macros (`dbt.type_float()`, `dbt.type_string()`, `dbt.datediff()`, `dbt.date_trunc()`, `dbt_utils.date_spine()`) rather than warehouse-specific syntax (`interval` literals, `double`/`varchar` casts, `DATE - DATE` arithmetic, `string_agg(... order by ...)`), so the same SQL runs unmodified across all four.
-    - **BigQuery run results**: Verified end-to-end on 2026-09-12 — `dbt build --target prod` against the live BigQuery warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/bigquery_prod_verification.md`](docs/bigquery_prod_verification.md) for details.
-      ![BigQuery Datasets built by dbt](./images/BigQuery_dbt_build.png)
-      ![BigQuery staging, intermediate, mart, and snapshot tables built by dbt](./images/BigQuery_dbt_build_stg_int_mart_snap.png)
-    - **Snowflake run results**: Verified end-to-end on 2026-09-13 — `dbt build --target snowflake` against a live Snowflake warehouse completed with zero errors (166 pass / 22 success / 1 expected warn). See [`docs/snowflake_prod_verification.md`](docs/snowflake_prod_verification.md) for details.
-      ![Snowflake databases and schemas built by dbt](./images/snowflake_dbt_build.png)
-    - **AWS Athena run results**: Verified end-to-end on 2026-09-29 — `dbt build --target athena` against **S3 + Glue Data Catalog + Athena** completed with zero errors (166 pass / 22 success / 1 expected warn), identical to BigQuery and Snowflake. Incremental marts are stored as **Iceberg** tables so `merge` works on Athena; a follow-up incremental run confirmed rows were upserted without duplicates. Access uses a dedicated least-privilege IAM user scoped to the project's S3 buckets. See [`docs/athena_prod_verification.md`](docs/athena_prod_verification.md) for details.
-      ![Athena query editor: Glue databases built by dbt and a journal_entries query result](./images/athena_query_journal_entries.png)
-      *Athena query editor — the tables dbt built in `audit_ready_dbt_finance` (left), and one day's journal entries: three balanced debit/credit pairs (revenue, returns, COGS) with the number of order/item lines behind each*
-    - **Cross-warehouse parity (automated)**: Passing tests on every warehouse doesn't prove the *numbers* agree. The weekly `cross_warehouse_parity` DAG loads identical sources into DuckDB, BigQuery, and Athena, fully rebuilds each, and compares journal-entry debits, row counts, and headline mart totals to the cent. Its first run caught two real DuckDB-only defects the per-warehouse test suites had missed — 32-bit float currency columns and host-time-zone-dependent posting dates — both fixed (see the macros table below). See [`docs/cross_warehouse_parity.md`](docs/cross_warehouse_parity.md).
-
-### 3. Modular Transformation (dbt)
 ![Data Lineage](./images/lineage_graph.png)
-**Visualizing the Audit-Ready Data Pipeline**
-* **Layered Architecture**: Implemented a 4-tier structure (Staging → Intermediate → Marts → Semantic Layer) to ensure data traceability.
-* **Color-Coded Nodes**:
-    - ![#27AE60](https://placehold.co/12x12/27AE60/27AE60.png) Raw Sources: BigQuery thelook & Airflow incremental
-    - ![#8D6E63](https://placehold.co/12x12/8D6E63/8D6E63.png) Seeds (lookup tables)
-    - ![#2980B9](https://placehold.co/12x12/2980B9/2980B9.png) Staging Layer - thelookecommerce
-    - ![#F1C40F](https://placehold.co/12x12/F1C40F/F1C40F.png) Staging Layer - Incremental
-    - ![#E67E22](https://placehold.co/12x12/E67E22/E67E22.png) Intermediate Layer
-    - ![#8E44AD](https://placehold.co/12x12/8E44AD/8E44AD.png) Financial Marts
-    - ![#F0B27A](https://placehold.co/12x12/F0B27A/F0B27A.png) Snapshots (scd_products)
-    - ![#5DADE2](https://placehold.co/12x12/5DADE2/5DADE2.png) Analyses
-    - ![#F1948A](https://placehold.co/12x12/F1948A/F1948A.png) Semantic Models (MetricFlow)
-    - ![#E84393](https://placehold.co/12x12/E84393/E84393.png) MetricFlow Metrics
-    - ![#1A252F](https://placehold.co/12x12/1A252F/1A252F.png) Utilities
-    - ![#E74C3C](https://placehold.co/12x12/E74C3C/E74C3C.png) Automated Data Quality Tests (Singular Tests)
-    - ![#ED7255](https://placehold.co/12x12/ED7255/ED7255.png) Exposures (Tableau dashboards)
-
-#### Model Directory
-* **Staging Layer** (`models/staging/thelook_ecommerce/`):
-    - 📂 `stg_thelook_ecommerce__orders.sql`
-    - 📂 `stg_thelook_ecommerce__order_items.sql`
-    - 📂 `stg_thelook_ecommerce__products.sql`
-    - 📂 `stg_thelook_ecommerce__users.sql`
-    - 📂 `stg_thelook_ecommerce__inventory_items.sql`
-    - 📂 `_thelook_ecommerce__sources.yml` — source definitions pointing to `raw_*.parquet`
-    - 📂 `_thelook_ecommerce__models.yml` — consolidated model documentation
-
-* **Staging Layer — Incremental** (`models/staging/incremental/`):
-    - 📂 `stg_incremental__order_items.sql`
-    - 📂 `stg_incremental__orders.sql`
-    - 📂 `stg_incremental__inventory_items.sql`
-    - 📂 `_incremental__sources.yml` — source definitions pointing to `incr_*.parquet`
-    - 📂 `_incremental__models.yml` — consolidated model documentation
-
-* **Intermediate Layer** (`models/intermediate/`):
-  - **Orders** (`orders/`):
-      - 📂 `int_order_items_unioned.sql`: UNION ALL of BigQuery-sourced and incremental order items at item grain. Shared base for `int_order_items_aggregated` and `order_item_revenue`.
-      - 📂 `int_order_items_aggregated.sql`: Sub-ledger aggregation per `order_id` (item count, total amount, refund rollup).
-      - 📂 `int_orders_joined.sql`: FULL JOIN of master ledger (`stg_orders`) and sub-ledger (`int_order_items_aggregated`). Shared base for `order_reconciliation` and `revenue` marts — eliminates duplicate join logic.
-      - 📂 `_int_orders__models.yml` — consolidated model documentation
-  - **Inventory** (`inventory/`):
-      - 📂 `int_inventory_items_joined.sql`: Item-level lifecycle join (inbound ↔ outbound) with LCM valuation logic.
-      - 📂 `int_inventory_items_unioned.sql`: UNION ALL of raw inventory receipts, one row per unit.
-      - 📂 `_int_inventory__models.yml` — consolidated model documentation
-
-* **Marts (Audit Layer)** (`models/marts/finance/`):
-    - 📂 `order_reconciliation.sql`: Master-to-Subledger reconciliation, including a status-variance detail column that separates benign patterns (partial refund/shipment) from true anomalies.
-    - 📂 `revenue.sql`: Accrual-based revenue recognition with cut-off risk detection.
-    - 📂 `refund_reconciliation.sql`: Linking refunds to original orders.
-    - 📂 `inventory_fiscal_report.sql`: Annual inventory valuation — COGS, LCM write-down, audit check, turnover ratios, and CPA-defined `risk_tier` / `materiality_threshold` per product category.
-    - 📂 `order_item_revenue.sql`: Item-level revenue model (grain: one row per order item), including product category/brand/name. Enables status-level breakdown (`complete` / `returned` / `shipped` etc.) that is not possible at order grain — essential for partial refund scenarios where a single order contains items with different statuses.
-    - 📂 `inventory_sellthrough.sql`: One row per physical inventory unit received, independent of order fulfillment status — answers "has this unit ever sold" directly.
-    - 📂 `journal_entry_lines.sql`: GL support — one row per source document (order for revenue, order item for returns, inventory item for COGS), with amounts taken from the marts that own each recognition rule.
-    - 📂 `journal_entries.sql`: Summarized GL postings — one balanced debit/credit pair per posting date and entry type, mapped through the `journal_entry_rules` and `chart_of_accounts` seeds. See [§4.5](#5-general-ledger-posting--exception-pipeline-aws-lambda).
-    - 📂 `_finance__models.yml` — consolidated model documentation
-    - 📂 `_finance__semantic_models.yml` — MetricFlow semantic model definitions
-    - 📂 `_finance__metrics.yml` — business metric definitions
-    - 📂 `_finance__exposures.yml` — downstream Tableau dashboard declarations (owner, dependencies)
-
-* **Utilities Layer** (`models/utilities/`):
-    - 📂 `metricflow_time_spine.sql` — date spine table required by MetricFlow for time-based metric aggregation
-    - 📂 `_utilities__models.yml` — consolidated model documentation
-
-> **Materialization Strategy**:
-> - **Staging**: `view` — zero storage cost, always reflects the latest source data.
-> - **Intermediate**: `view` (not `ephemeral`) — dbt best practice suggests ephemeral for intermediate models to avoid creating unnecessary DB objects. This project deliberately uses views instead for two reasons:
->   1. `int_order_items_aggregated` is referenced by three downstream marts — ephemeral would inline and re-execute the same complex aggregation SQL three times;
->   2. intermediate models contain non-trivial join and aggregation logic that benefits from being directly queryable for debugging and validation.
-> - **Marts**: `order_reconciliation`, `revenue`, `refund_reconciliation`, and `order_item_revenue` use **incremental models** (`merge` strategy) with a lookback window (`incremental_lookback_days`, default: 14 days) filtered on business timestamps (`created_at`, `shipped_at`, `returned_at`/`last_refund_at`) to catch late shipments and returns. Since that only re-scans *recent* timestamps, `dbt_run_marts` also runs `--full-refresh` on Sundays to catch backdated corrections older than the window. `inventory_fiscal_report`, `inventory_sellthrough`, `journal_entry_lines`, and `journal_entries` are plain full-refresh **tables** — cross-year LAG calculations, the pass-through sell-through view, and the GL (which must always tie to the current marts) all need complete recalculation, not incremental merge.
-> - **Utilities**: `table` — `metricflow_time_spine` is materialized as a static table since MetricFlow requires a pre-built date spine to perform time-based aggregations.
-
-#### Jinja Macros
-Repeated SQL expressions are extracted into reusable macros to enforce DRY principles and make business logic easier to maintain. Documented in 📂 `macros/_macros.yml`.
-
-| Macro | Usage | Purpose |
-|---|---|---|
-| `fiscal_year_end(year_col)` | `inventory_fiscal_report` (×3) | Returns the fiscal year-end date (`YYYY-12-31`) as a `DATE`, capped at `current_date` so the year still in progress is evaluated as of today rather than a not-yet-elapsed December 31st |
-| `datediff_days(start, end)` | `int_inventory_items_joined` (×2), `inventory_fiscal_report` (×1) | Calculates day difference between two date columns via `dbt.datediff()`, used for inventory aging/velocity buckets and fiscal year-end day counts |
-| `within_incremental_lookback(column)` | `order_reconciliation`, `revenue`, `order_item_revenue` (×3 each), `refund_reconciliation` (×2) | Returns whether a timestamp column falls within the incremental lookback window (`var("incremental_lookback_days")`), used to build each incremental mart's `is_incremental()` filter |
-| `string_agg_distinct(column)` | `int_order_items_aggregated` (×1) | Concatenates a column's distinct values, ordered — dispatches to `listagg(distinct col, sep) within group (order by col)` on Snowflake (no `string_agg(... order by ...)` equivalent there), `array_join(array_sort(array_distinct(array_agg(col))), sep)` on Athena (Trino has neither form), and `string_agg(distinct col order by col)` elsewhere |
-| `duckdb__type_float()` | every `dbt.type_float()` call on DuckDB | Overrides dbt's DuckDB `float` (32-bit REAL) with `double`, matching the 64-bit float every other warehouse uses — REAL silently loses cents on currency columns |
-| `duckdb__alter_column_type()` | incremental models with `on_schema_change='sync_all_columns'` | Changes a column type with a single `ALTER COLUMN ... TYPE`. dbt's default four-statement swap followed by the `MERGE` in the same transaction fails to commit on DuckDB, so an existing incremental table could never change a column type in place |
-| `set_utc_session_timezone()` | `on-run-start` hook | Pins DuckDB's session time zone to UTC so casting UTC source timestamps doesn't shift posting dates or month-end cut-off to the host machine's zone; renders nothing on other adapters |
-
-```sql
--- Example: fiscal_year_end macro in use
-LEFT JOIN {{ ref('scd_products') }} scd
-    ON  l.product_id = scd.product_id
-    AND {{ fiscal_year_end('y.fiscal_year') }} >= scd.dbt_valid_from
-    AND (scd.dbt_valid_to IS NULL OR {{ fiscal_year_end('y.fiscal_year') }} < scd.dbt_valid_to)
-```
-
-### 4. Orchestration (Apache Airflow + Docker)
-* **File**: 📂 `dags/dbt_incremental_pipeline.py`
-* **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
-* **Pipeline**: after step 1 the DAG forks into a local **DuckDB branch** (feeds the Tableau exports) and an **AWS branch** (the production Athena warehouse and the journal-entry export).
-    1. `generate_incremental_data` — Creates the business date's (`ds`) synthetic orders in `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet` — and advances every synthetic order's lifecycle to the current time
-    2. `dbt_source_freshness` — Checks `incr_orders` / `incr_order_items` freshness (warn after 30h, error after 54h, sized to the daily cadence). Placed right after the step that just wrote today's data, so it always passes when the DAG runs at all — it demonstrates the mechanism rather than catching a real failure mode, since the one failure that matters here (the host machine being off) leaves nothing running to report it. See the task's `doc_md` for the full caveat.
-    3. `dbt_seed` — Reloads the `audit_materiality_thresholds`, `chart_of_accounts`, and `journal_entry_rules` lookup tables so threshold or posting-rule changes take effect without manual intervention
-    4. `dbt_run_snapshot` — Refreshes `scd_products` SCD Type 2 snapshot to capture daily price/cost changes
-    5. `dbt_run_intermediate` — Recreates all five intermediate views. Views already reflect current data on every query (no dbt run needed for freshness) — this step is a safety net that keeps view definitions in sync if a model's SQL changes.
-    6. `dbt_run_marts` — Incremental merge into `order_reconciliation`, `revenue`, `refund_reconciliation`, `order_item_revenue` (full-refresh instead on Sundays, to catch backdated corrections the lookback window can't see); full-refresh rebuild of `inventory_fiscal_report` and `inventory_sellthrough` (plain table materializations — cross-year LAG logic and the unit-level sell-through view both need complete recalculation, not a partial merge)
-    7. `dbt_test_incremental` — Runs tests on `stg_incremental__*`, intermediate, and mart models to validate pipeline output
-    8. `export_for_tableau` — Exports all six mart tables to `tableau_exports/*.csv` for Tableau Public (overwrites on each run)
-
-    **AWS branch** (runs in parallel with steps 2–8):
-
-    - a. `upload_incremental_to_s3` — Republishes `incr_*.parquet` to S3 and re-registers the Glue tables
-    - b. `dbt_build_athena` — `dbt build --target athena`: every model and test, including the journal balance and control-total tests, so a failing control stops the branch before anything is posted. Uses its own `--target-path` so it never collides with the DuckDB branch's `target/`.
-    - c. `export_journal_entries` — Invokes the `audit-ready-je-pipeline` Lambda for the run's business date (see [§4.5](#5-general-ledger-posting--exception-pipeline-aws-lambda))
-
-> **Note**: The DuckDB steps run sequentially (chained with `>>`) to avoid DuckDB write-lock contention — DuckDB allows only one writer at a time. `max_active_runs=1` additionally ensures no two DAG runs overlap. The Airflow containers read AWS credentials from a read-only mount of `~/.aws` (never from the repo); the daily pipeline's IAM user can *invoke* the Lambda but not change it.
-
-* **Weekly parity check** (📂 `dags/cross_warehouse_parity.py`, Sundays 12:00 UTC or manual): reloads all sources into BigQuery and Athena, runs `dbt build --full-refresh` on DuckDB (a separate `parity.duckdb`), BigQuery, and Athena in parallel, then `scripts/check_warehouse_parity.py` compares ten metrics across all three via `dbt show` — so `ref()` resolves per warehouse and no engine-specific SQL is needed — and fails on any difference. Snowflake is excluded because it ran on a 30-day trial.
-
-  ![Airflow grid for cross_warehouse_parity: loads, three parallel builds, and the parity check all succeeding](./images/airflow_parity_dag.png)
-  *`cross_warehouse_parity` — BigQuery and Athena source loads, full-refresh builds on DuckDB, BigQuery, and Athena in parallel, then `check_parity`*
-
-![Airflow DAG Overview](./images/airflow_dag_overview.png)
-
-*DAG list — the daily pipeline and the weekly parity check*
-
-![Airflow DAG Runs](./images/airflow_dag_runs.png)
-
-*Grid view — daily runs succeeding; the three AWS-branch tasks appear from the latest runs*
-
-### 5. SCD Type 2 Snapshot (Product Price Tracking)
-* **File**: 📂 `snapshots/scd_products.sql`
-* **Strategy**: `check` — tracks row-level changes on `cost`, `retail_price`, `product_name`, `category` using `dbt snapshot`.
-* **Purpose**: Maintains a full historical record of product price and category changes, enabling point-in-time inventory valuation and audit traceability without overwriting prior states.
-* **Hard Delete Handling**: `invalidate_hard_deletes=True` ensures removed products are flagged rather than silently dropped from history.
-
-### 6. Quality Control
-* **Automated Reconciliation**: Custom dbt tests to flag financial discrepancies.
-![dbt Test Results](./images/test_results.png)
-> All 200 tests pass. `assert_fulfillment_lead_time_within_baseline` is intentionally warn-severity: it flags a known source-data defect (see below) that can't be fixed at the transform layer, so it warns rather than blocks — and currently doesn't fire.
-
-    * **Model Schema Tests** (column-level constraints & descriptions):
-        - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__models.yml`
-        - 📂 `models/staging/thelook_ecommerce/_thelook_ecommerce__sources.yml`
-        - 📂 `models/staging/incremental/_incremental__models.yml`
-        - 📂 `models/staging/incremental/_incremental__sources.yml`
-        - 📂 `models/intermediate/inventory/_int_inventory__models.yml`
-        - 📂 `models/intermediate/orders/_int_orders__models.yml`
-        - 📂 `models/marts/finance/_finance__models.yml`
-    
-    * **Custom Assertion Tests** (business-logic validation):
-        - 📂 `tests/assert_order_reconciliation_is_successful.sql`
-        - 📂 `tests/assert_no_variance_in_order_recon.sql`
-        - 📂 `tests/assert_revenue_recognition_logic.sql`
-        - 📂 `tests/assert_fulfillment_lead_time_within_baseline.sql` — warns if the negative-lead-time rate rises well past its historical baseline
-        - 📂 `tests/assert_journal_entries_balanced.sql` — every journal entry's debits equal its credits to the cent
-        - 📂 `tests/assert_journal_entries_reconcile_to_marts.sql` — control totals: posted revenue ties to the item-level subledger, returns to `refund_reconciliation`, COGS to `inventory_fiscal_report`
-        - 📂 `tests/assert_no_future_dated_events.sql` — preventive control: no order, shipment, or return dated after the build runs; on the daily Athena branch a failure stops the build before any journal entry is posted
-    
-    * **Audit Exception Analyses** (`analyses/`) — ad-hoc audit queries compiled via `dbt compile`, using `{{ ref() }}` for table references. Copy the rendered SQL from `target/compiled/` to run directly against DuckDB:
-        - 📂 `audit_inventory_exceptions.sql` — flags inventory equation imbalances (`audit_check_diff ≠ 0`), LCM write-down candidates, and slow-moving/obsolete stock
-        - 📂 `audit_revenue_cutoff_risk.sql` — surfaces cut-off risk orders (created in one month, shipped in another) and pending shipments with unrecognized revenue
-        - 📂 `audit_order_reconciliation_failures.sql` — lists orphan sub-ledger, missing sub-ledger, item count variances, and status mismatches between master and sub-ledger
-        - 📂 `audit_refund_anomalies.sql` — detects partial refund patterns, high-value full reversals, and orders where refund exceeds 50% of gross revenue
-        - 📂 `audit_fulfillment_lead_time_anomalies.sql` — flags items where `shipped_at` precedes `created_at`, a source-data defect traced to the raw feed
-* **CI** (GitHub Actions — 📂 `.github/workflows/ci.yml`): SQLFluff lint and `dbt build` run automatically on every push and pull request to `main`. PRs run **Slim CI** — `dbt build --select state:modified+ --defer`, scoped to changed models and their downstream — using main's last successful build as the deferral baseline. Since DuckDB is a single-file database rather than a persistent shared warehouse, that baseline is both the `manifest.json` *and* the built `dev.duckdb` itself, uploaded as a GitHub Actions artifact on every successful `main` push and restored at the start of the next PR; if no baseline exists yet, it falls back to a full build. A separate job runs Ruff and the pytest suites (`lambdas/`, `scripts/`) on Python 3.12 (the Lambda runtime). dbt-core is pinned to the version used locally and in the Airflow image, and Slim CI only defers to a baseline built by the same dbt version — otherwise it falls back to a full build, since a newer dbt's manifest may not parse.
-
-  ![GitHub Actions CI: SQLFluff Lint, dbt Test, and Python Unit Tests all passing](./images/github_actions_ci.png)
-  *CI on `main` — SQL lint, the dbt build, and the Python unit tests (Lambda + generator) run as three parallel jobs. The two artifacts are this build's `manifest.json` and `dev.duckdb`, which the next PR's Slim CI defers to.*
-
-### 7. SQL Code Quality (SQLFluff)
-* **Linter**: [SQLFluff](https://sqlfluff.com/) — DuckDB dialect, dbt Jinja templater (📂 `.sqlfluff`). Enforces consistent formatting and explicit column qualification across all SQL models.
-
-### 8. Python Code Quality (Ruff)
-* **Linter & Formatter**: [Ruff](https://docs.astral.sh/ruff/) — configured in 📂 `pyproject.toml`.
-
-### 9. YAML Code Quality (Prettier + dbt JSON Schema)
-* **Formatter**: [Prettier](https://prettier.io/) — configured in 📂 `.prettierrc`. Run `npm install` to set up.
-* **Schema Validation**: [dbt JSON Schema](https://github.com/dbt-labs/dbt-jsonschema) — validates dbt YAML structure in VS Code (📂 `.vscode/settings.json`).
-
-### 10. Semantic Layer (MetricFlow)
-
-Implemented a **dbt Semantic Layer** using MetricFlow to define standardized, reusable business metrics on top of the mart layer. This ensures metric definitions live in version-controlled code rather than scattered across BI tools.
-
-#### Semantic Models & Metrics
-
-| Semantic Model | Source Mart | Entity | Time Dimension |
-|---|---|---|---|
-| `revenue` | `revenue` | `order` | `created_at` (day) |
-| `refund_reconciliation` | `refund_reconciliation` | `order` | `order_date` (day) |
-| `inventory_fiscal_report` | `inventory_fiscal_report` | `product` | `fiscal_year_end_date` (year) |
-| `order_item_revenue` | `order_item_revenue` | `order_item` | `created_at` (day) |
-| `audit_materiality` | `audit_materiality_thresholds` | `product_category` | — (dimensional only) |
-
-| Category | Metrics |
-|---|---|
-| Revenue | `total_recognized_revenue`, `total_gross_revenue`, `order_count`, `revenue_recognition_rate` |
-| Refund | `total_refund_amount`, `total_net_revenue`, `refund_rate`, `refund_base_gross_revenue` |
-| Inventory | `total_inventory_value`, `total_net_realizable_value`, `total_lcm_allowance`, `total_cogs`, `total_period_revenue`, `inventory_gross_profit` |
-| Order Item | `total_item_gross_revenue`, `total_recognized_item_revenue`, `item_count`, `item_recognition_rate` |
-| Cumulative | `cumulative_recognized_revenue`, `cumulative_gross_revenue`, `cumulative_refund_amount`, `cumulative_order_count` |
-| MoM Growth | `revenue_growth_mom`, `gross_revenue_growth_mom`, `refund_rate_change_mom`, `item_revenue_growth_mom` |
-
-#### Example Queries
-
-```bash
-# List all available metrics
-mf list metrics
-
-# List available dimensions for a metric
-mf list dimensions --metrics total_gross_revenue
-
-# Revenue metrics by month
-mf query --metrics total_gross_revenue,total_recognized_revenue,order_count \
-         --group-by metric_time__month
-
-# Refund breakdown by refund type
-mf query --metrics refund_rate,total_refund_amount,total_net_revenue \
-         --group-by order__refund_type
-
-# Inventory valuation by fiscal year and product category
-mf query --metrics total_inventory_value,total_cogs,inventory_gross_profit \
-         --group-by product__fiscal_year,product__product_category
-
-# Item-level revenue breakdown by order item status (handles partial refund scenarios)
-mf query --metrics total_recognized_item_revenue,total_item_gross_revenue \
-         --group-by order_item__order_item_status
-
-# Cumulative YTD recognized revenue by month (filter by year for period-end audit)
-mf query --metrics cumulative_recognized_revenue \
-         --group-by metric_time__month \
-         --where "metric_time__day >= '2024-01-01' AND metric_time__day < '2025-01-01'"
-
-# MoM growth metrics — revenue trend and refund rate anomaly detection
-mf query --metrics revenue_growth_mom,gross_revenue_growth_mom --group-by metric_time__month
-mf query --metrics refund_rate_change_mom --group-by metric_time__month
-```
-
-> **Note on `mf query` vs `dbt sl query`**: dbt's official documentation recommends `dbt sl query`, but this applies to the **dbt Cloud CLI** — a separate tool from dbt Core. In dbt Core, `dbt sl` is not available; MetricFlow is invoked directly via `mf query` (provided by the `dbt-metricflow` package). Both commands use the same MetricFlow engine underneath.
-
-#### Architectural Note: Semantic Layer vs. Tableau
-
-This project uses **dbt Core** (not dbt Cloud), which means the Semantic Layer cannot be directly wired into Tableau — that integration requires dbt Cloud's managed Semantic Layer endpoint.
-
-As a result, the BI layer (Tableau Public) consumes mart tables via CSV exports — generated by `scripts/export_for_tableau.py` and refreshed automatically at the end of each Airflow DAG run — while the Semantic Layer serves two independent purposes:
-
-> **Why CSV exports instead of a live DuckDB connection?** Tableau Public (the free tier) only supports file-based data sources and does not allow live database connections via JDBC/ODBC. A direct DuckDB connection would require Tableau Desktop (paid). The CSV export approach bridges this gap: Airflow keeps the files current, and Tableau Public loads them as static snapshots.
-
-1. **Metric governance**: All business metric definitions (`revenue_recognition_rate`, `refund_rate`, etc.) are version-controlled in code rather than defined ad-hoc in dashboards.
-2. **CLI demonstration**: `mf query` enables direct metric querying from the terminal, useful for ad-hoc analysis and verifying metric logic before surfacing in dashboards.
-
-This also explains why the mart layer retains a **denormalized, purpose-built structure** (`revenue`, `order_reconciliation`, `refund_reconciliation` as separate tables) rather than consolidating into a single wide `orders` table. With dbt Cloud Semantic Layer handling the abstraction, normalized marts would be preferred — but for direct BI tool consumption, focused marts are more practical.
 
 ---
 
-## 4. Financial Modeling & Accounting Logic
-This project moves beyond simple ETL by embedding **Accounting Principles** into the data transformation layer to ensure audit-ready data reliability.
+## Key Design Decisions
 
-### 1. Financial Data Reconciliation (Master-to-Subledger)
-* **File**: 📂 `models/marts/finance/order_reconciliation.sql`
-* **Objective**: Ensure the completeness and accuracy of financial data by reconciling the Master table (Orders) with the Sub-ledger (Order Items).
-* **Validation Logic**:
-    - **Completeness**: Verified `order_id` matches across all layers to ensure no data loss.
-    - **Accuracy**: Reconciled total item counts and order statuses between master records and granular transaction lines.
-    - **Status Synchronization**: Validated **Order Status alignment** to detect any state-mismatch discrepancies between the header and line levels.
-* **Audit Control**: Engineered an automated reconciliation layer that triggers an Audit Alert for any variance. This proactive control prevents downstream reporting errors and ensures the data is **"Audit-Ready"** for financial verification.
+1. **dbt owns the accounting; the GL is derived, never re-derived.** `journal_entries` posts revenue, returns, and COGS from the marts that own each recognition rule. Tests enforce debit = credit and tie posted totals back to independently built marts on every build.
+2. **Portable SQL, proven to the cent.** The same models build on DuckDB, BigQuery, Snowflake, and AWS Athena through dbt's cross-database macros. A weekly Airflow DAG rebuilds three warehouses from identical sources and compares ten GL and mart totals; its first run caught two DuckDB-only defects the test suites had missed.
+3. **Preventive over detective controls.** An error-severity test fails the build on any future-dated shipment or return, so nothing is posted — added after the exception pipeline caught revenue being recognized ahead of shipment.
+4. **Local-first, incremental, CI-gated.** DuckDB keeps development cost near zero; incremental marts merge with a 14-day lookback plus a Sunday full refresh. 199 data tests — seven of them singular tests for accounting controls such as sub-ledger reconciliation, revenue recognition, and double-entry balance — run on every build, and Slim CI builds and tests only changed models.
+5. **AWS as the integration layer.** A SAM-deployed Lambda exports each day's entries and exceptions to a versioned S3 bucket — a point-in-time record the marts can't provide — with least-privilege IAM and separate deploy and run users.
+6. **Deliberate departures from defaults.** Intermediate models are views, not the ephemeral models dbt recommends, because `int_order_items_aggregated` feeds three marts — ephemeral would re-run that aggregation three times — and views stay queryable for debugging. The Airflow DuckDB steps run strictly in sequence because DuckDB allows only one writer at a time.
+7. **Governed metrics and lineage to the dashboard.** 26 business metrics are defined once in MetricFlow rather than inside dashboards, and each of the four Tableau dashboards is declared as a dbt exposure, so the lineage graph shows which dashboard a mart change would break before it ships.
 
-### 2. Revenue Recognition & Cut-off Management
-* **File**: 📂 `models/marts/finance/revenue.sql`
-* **Objective**: Implemented **Accrual Basis** accounting standards by designating `shipped_at` (fulfillment) as the primary trigger for revenue realization, ensuring compliance with **GAAP/IFRS** principles.
-* **Complex Order State Management**:
-    - Utilized `STRING_AGG(DISTINCT status)` (via `int_order_items_aggregated`, which `revenue.sql` builds on) to synchronize and monitor multiple item statuses within a single `order_id`.
-    - Applied **COALESCE logic** to prevent data loss across the Full-Join between Master and Sub-ledger, maintaining a Single Source of Truth (SSOT).
-* **Temporal Analysis & Cut-off Control**:
-    - Engineered logic to analyze the time-lag between **Order Creation (`created_at`)** and **Fulfillment (`shipped_at`)**.
-    - **Risk Mitigation**: Automated detection of **Potential Cut-off Risks** where revenue recognition spans different fiscal periods, preventing overstatement of monthly/yearly earnings.
+## Accounting Logic
 
-### 3. Returns & Refund Reconciliation
-* **File**: 📂 `models/marts/finance/refund_reconciliation.sql`
-* **Objective**: Aggregates returned item amounts to `order_id` grain, moving away from treating refunds as isolated negative flows to provide a holistic view of the order lifecycle.
-* **Revenue Reversal Integrity**: Ensured accurate **Net Revenue** calculation by accounting for historical reversals, eliminating the risk of overstated top-line metrics.
-* **Audit Trail**: Created a `refund_type` classification (`NO REFUND` / `FULLY REFUNDED` / `PARTIALLY REFUNDED`) and `refund_value_rate` / `refund_count_rate` metrics to identify high-risk return patterns, providing transparency for stakeholders and internal auditors.
+Eight marts in `models/marts/finance/`:
 
-    - **Data Limitation (Acknowledged)**: The thelook_ecommerce BigQuery dataset synchronizes statuses at the order-header level — all items within a single `order_id` share the same status. As a result, **partial refund scenarios are structurally absent from the historical source data**. This is a known limitation of the dataset, not a pipeline issue.
+**Orders & revenue**
+- **Order reconciliation** (`order_reconciliation`) — Reconciles master orders to the item sub-ledger on completeness, item counts, and status, separating explained variances (partial refunds and shipments) from true breaks.
+- **Revenue recognition & cut-off** (`revenue`) — Accrual basis with shipment as the trigger (ASC 606 control transfer, FOB shipping point). Orders created and shipped in different periods are flagged as cut-off risk. Returns are posted when they occur; estimating a refund liability at the point of sale, as strict ASC 606 would, is noted as out of scope.
+- **Item-level revenue** (`order_item_revenue`) — One row per order item, for the status-level breakdown (`complete` / `returned` / `shipped`) that order grain can't show when one order is partly refunded.
+- **Refund reconciliation** (`refund_reconciliation`) — Rolls returns up to the order to compute net revenue and classify each order as no, partial, or full refund. Partial refunds come from synthetic data, since the source syncs item statuses at the order level.
 
-    - **Solution — Ongoing Simulation via Airflow** (📂 `scripts/generate_daily_incremental.py`): The daily pipeline generates synthetic orders that include partial refund scenarios (15% probability — one item returned, another completed within the same `order_id`). These flow through a dedicated staging layer (`stg_incremental__*`) and UNION into the intermediate models alongside BigQuery data — ensuring partial refund detection logic is continuously exercised on incoming data.
+**Inventory**
+- **Inventory valuation** (`inventory_fiscal_report`) — Specific identification per unit, an annual roll-forward (beginning + purchases − ending = COGS), lower-of-cost-or-market against the year-end price from an SCD Type 2 snapshot, aging buckets, and CPA-defined materiality tiers by category.
+- **Unit sell-through** (`inventory_sellthrough`) — One row per physical unit received, answering whether each unit has ever sold.
 
-    - **Logic Verification**: The reconciliation model correctly identifies 'PARTIALLY REFUNDED' cases and calculates precise `refund_count_rate` and `refund_value_rate` at `order_id` grain.
+**General ledger**
+- **Journal entries** (`journal_entry_lines`, `journal_entries`) — Support lines per order, item, or unit, rolled into one balanced debit/credit pair per posting date and entry type (revenue, returns, COGS), with account mapping kept in seeds. A Lambda exports each day's entries and exceptions to S3.
 
-### 4. Financial Inventory Control & Valuation (Specific Identification)
-* **File**: 📂 `models/marts/finance/inventory_fiscal_report.sql`
-* **Methodology (Specific Identification & Cut-off)**: Implemented item-level cost tracking by following each `inventory_item_id` from inbound receipt to outbound sale — a **Specific Identification** approach that provides a granular audit trail and precise COGS calculation without the pooling assumptions of FIFO/LIFO.
-* **Annual Reconciliation (Audit-Ready)**: Developed a fiscal-year snapshot engine that reconciles **Beginning Inventory + Purchases - Ending Inventory = COGS**.
-* **Lower of Cost or Market (LCM)**: Engineered automated valuation logic that compares `historical_unit_cost` against the **period-end market price** sourced from the `scd_products` Type 2 snapshot (effective as of December 31st of each fiscal year). This ensures the LCM write-down reflects actual year-end market conditions — not the price frozen at inbound receipt — calculating the correct "Allowance for Inventory Valuation" for Balance Sheet reporting.
-* **Inventory Aging & Velocity**: Developed an aging engine that buckets inventory into four categories (`<2yr` / `2–3yr` / `3–4yr` / `>4yr`). Combined this with **Inventory Turnover Ratios** at the product level to identify high-risk, slow-moving assets.
-* **Audit Materiality by Category**: Joined 📂 `seeds/audit_materiality_thresholds.csv` — a CPA-defined lookup table assigning `risk_tier` (High / Medium / Low) and `materiality_threshold` ($10K / $5K / $2.5K) to each of the 26 product categories — directly into the mart. This exposes category-level audit priority alongside financial metrics, enabling threshold-based exception filtering without hardcoded values.
-* **Data Integrity**: Applied rigorous dbt tests and intermediate-layer cleansing to enforce accounting principles, such as maintaining **chronological flow** (Inbound ≤ Outbound) and preventing negative inventory durations.
-* **Unit-Level Sell-Through** (📂 `models/marts/finance/inventory_sellthrough.sql`): A separate, unaggregated mart — one row per physical unit received — built to answer a question `inventory_fiscal_report` can't: has this specific unit ever sold? Surfaced a real audit finding: 63% of units ever received have no sale event at all, including units received back in 2020 and still on hand today.
+→ [Accounting logic in detail](docs/accounting_logic.md)
 
-#### Model Detail: `inventory_fiscal_report` (Representative Example)
-> The most complex mart in the project — wiring together a snapshot (point-in-time LCM pricing), a macro (fiscal year-end date), a seed (CPA-defined materiality thresholds), and multi-year LAG logic into a single audit-ready model. Used here to illustrate how dbt features and accounting principles converge in practice.
+## Findings
 
-**Metadata & Governance**
-Tags (`financial`, `audit_ready`), access level (`protected`), and model description ensure the model's purpose and governance are transparent for financial stakeholders.
-![Model Metadata](./images/model_header.png)
+- **Slow-moving stock, not mis-valued stock.** About 58% of units ever received have no sale event, some on hand since 2020, and average days on hand has risen every year since FY2022 — while the LCM and materiality controls come back clean.
+- **Source-data defect, monitored rather than patched.** Some `shipped_at` timestamps precede `created_at` in the raw feed; a warn-severity test tracks the rate against its baseline.
+- **Revenue recognized before shipment.** The exception pipeline's first run flagged 139 future-dated events from the synthetic-data generator, leading to a generator fix and the preventive test (design decision 3).
+- **Cross-warehouse drift.** The parity check found 32-bit float currency columns and host-time-zone-dependent posting dates on DuckDB; both are fixed, and the warehouses now agree to the cent.
 
-**Accounting Logic Implementation**
-21 columns covering the full inventory lifecycle — B/S metrics (`beginning_inv_value`, `ending_gross_inv_value`, `ending_allowance_lcm`, `ending_net_realizable_value`), P&L metrics (`period_cogs_amount`, `period_revenue`), audit fields (`audit_check_diff`, `risk_tier`, `materiality_threshold`), and financial ratios (`inventory_turnover_ratio`, `gross_profit_margin`).
-![Financial Columns 1](./images/model_columns_1.png)
-![Financial Columns 2](./images/model_columns_2.png)
+![Tableau inventory dashboard: days on hand trend, never-sold finding, and clean LCM and materiality controls](./images/tableau_dashboard_inventory.png)
+*Example dashboard (one of four tabs): Inventory — days on hand rising every year, the never-sold finding, and LCM and materiality controls that come back clean (July 2026 snapshot)*
 
-**Automated Internal Controls & Downstream Usage**
-7 dbt tests enforcing: `not_null` on `fiscal_year`, `product_id`, `risk_tier`; `accepted_values` on `audit_check_diff` (must be `0`), `inventory_risk_rating` (Healthy / Warning: Slow Moving / Critical: Obsolete / Adjustment Required: NRV < Cost), `risk_tier` (High / Medium / Low); and `unique_combination_of_columns` on `(fiscal_year, product_id)`.
-![Data Tests](./images/model_data_tests.png)
+**[▶ View the dashboards on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)** · [Dashboard notes](docs/dashboards.md)
 
-Referenced downstream by `audit_inventory_exceptions.sql` (ad-hoc audit analysis), the `inventory_fiscal_report` semantic model (MetricFlow), and the Inventory Dashboard exposure (Tableau) — the same tested mart feeds the audit drill-down, governed metric definitions, and the BI layer.
-![Analyses](./images/model_data_analyses.png)
-![Semantic Models](./images/model_data_semantic_models.png)
-![Exposures](./images/model_data_exposures.png)
+## Limitations & Trade-offs
 
-**Dependency Graph**
-Depends on `int_inventory_items_joined` (model), `scd_products` (snapshot), `fiscal_year_end` (macro), and `audit_materiality_thresholds` (seed) — all four dbt node types wired into a single model.
-![Depends On Seeds](./images/model_depends_seeds.png)
-![Depends On Models](./images/model_depends_models.png)
-![Depends On Snapshots](./images/model_depends_snapshot.png)
-![Depends On Macros](./images/model_depends_macro.png)
+- **Synthetic incremental data.** Everything after the BigQuery extract is generated, and partial refunds exist only there, since the source syncs item statuses at the order level.
+- **Returns without a refund-liability estimate.** Returns post when they occur rather than being estimated at the point of sale under ASC 606.
+- **Dashboards read CSV snapshots.** Tableau Public allows no live database connection, and dbt Core's semantic layer can't feed Tableau, so Airflow refreshes CSV exports instead.
+- **Local orchestration.** Airflow runs on a laptop, so the source-freshness check can't detect the one failure that matters — the host being off.
+- **Snowflake verified once.** It ran on a 30-day trial, so it is excluded from the weekly parity check.
 
-### 5. General Ledger Posting & Exception Pipeline (AWS Lambda)
-* **Files**: 📂 `models/marts/finance/journal_entries.sql`, 📂 `models/marts/finance/journal_entry_lines.sql`, 📂 `lambdas/`
-* **Division of labor**:
-    - **dbt owns the accounting.** `journal_entry_lines` takes each amount from the mart that owns its recognition rule — revenue from `revenue.recognized_revenue`, returns from returned items in `order_item_revenue`, COGS from item-level historical cost — and `journal_entries` rolls them into one balanced Dr/Cr pair per posting date and entry type. The GL never re-derives recognition logic, so it cannot drift from the marts. Two tests enforce double-entry and control-total integrity on every build, on every warehouse.
-    - **Lambda is the integration layer.** Invoked by Airflow once the Athena build and its tests pass, it exports the day's entries as a GL upload file with order/item-level support, runs the exception rules, and writes both to S3.
+## Quick Start
 
-| Entry | Posting | Posting date | Source |
-|---|---|---|---|
-| `REV` | Dr 1200 Accounts Receivable / Cr 4000 Sales Revenue | `shipped_at` | `revenue.recognized_revenue` |
-| `RET` | Dr 4100 Sales Returns & Allowances / Cr 1200 Accounts Receivable | `returned_at` | returned items in `order_item_revenue` |
-| `COGS` | Dr 5000 Cost of Goods Sold / Cr 1300 Inventory | `shipped_at` | item-level cost (specific identification) |
-
-* **Revenue recognition policy**: Revenue is recognized when control transfers under ASC 606 / IFRS 15. With FOB shipping-point terms, that is at **shipment**, consistent with `revenue.sql`. Under FOB destination terms the trigger would be `delivered_at` — a policy change that belongs in `revenue.sql`, not the GL layer.
-* **Known simplification**: Returns are posted when they occur. Strict ASC 606 would estimate expected returns at the point of sale as a refund liability (variable consideration); that estimate is out of scope here.
-* **Exception rules** (📂 `lambdas/je_pipeline/rules.py`, each covered by pytest in 📂 `lambdas/tests/`):
-
-| Rule | Severity | Flags |
-|---|---|---|
-| `RECONCILIATION_BREAK` | High | Master/sub-ledger breaks — orphan or missing sub-ledger, item-count variance, unexplained status variance (explained partial refunds/shipments are excluded) |
-| `CUTOFF_RISK` | Medium | Ordered and shipped in different months |
-| `DUPLICATE_SUSPECT` | High | Same customer and amount within 10 minutes |
-| `AMOUNT_OUTLIER` | Seed risk tier | Item price above the category's Q3 + 3×IQR; severity comes from `audit_materiality_thresholds` |
-| `REFUND_EXCEEDS_REVENUE` | High | Refund larger than the order's gross revenue |
-
-* **Outputs** (`s3://audit-ready-dbt-reports-*/je-pipeline/period=<start>_<end>/`): `journal_entries.csv` (GL upload file), `journal_detail.csv` (support for every amount), `exceptions.csv`, `run_summary.json`. The bucket is versioned with `DeletionPolicy: Retain` — each period's export is a point-in-time record of what was posted, which the marts cannot provide because incremental merges and fixes keep changing history.
-
-  ![S3 reports bucket: one business day's journal-entry export files](./images/s3_je_pipeline_outputs.png)
-  *`je-pipeline/period=2026-09-29_2026-09-29/`, written by the daily DAG's `export_journal_entries` — the GL upload file (three balanced entries: revenue, returns, COGS), the order/item-level support, the exception report (header only: no exceptions that day), and the run summary*
-* **Infrastructure as code** (📂 `lambdas/template.yaml`, deployed with AWS SAM): the function, its least-privilege execution role (Athena, Glue read, S3 read, write only to query results and the reports bucket), the reports bucket, and a 30-day log group. Deploys use a separate IAM user; the daily pipeline's user can only invoke the function.
-
-  ![CloudFormation stack audit-ready-je-pipeline with its four resources](./images/cloudformation_stack_resources.png)
-  *CloudFormation stack `audit-ready-je-pipeline`, deployed by SAM from `lambdas/template.yaml` — the Lambda function, its execution role, the log group, and the versioned reports bucket. Code redeploys update only the function; the role, bucket, and log group are untouched.*
-* **First-run finding → detective to preventive control**: On its first real run, a `FUTURE_DATED_SHIPMENT` exception rule flagged orders whose `shipped_at` had been written up to 48 hours *ahead* of generation time by the synthetic-data generator — `revenue` was recognizing revenue for shipments that had not happened yet (139 future-dated events in the marts). The root cause was fixed in the generator (see [§3.1](#1-ingestion--synthetic-data-generation)), and the check moved from the Lambda, which could only report it *after* posting, into an error-severity dbt test (`assert_no_future_dated_events`) that fails the Athena build and so blocks the GL export.
-* **Verification**: [`docs/je_pipeline_verification.md`](docs/je_pipeline_verification.md).
-
-### 6. Dashboard Showcase
-A 4-tab Tableau workbook (`tableau_workbook/audit_ready_dbt_dashboard (desktop) .twb`, packaged as `(server).twbx`) consuming the CSV exports above — one tab per mart, each pairing KPI tiles with an audit-oriented drill-down, putting the accounting logic above into an actual audit view.
-
-Each tab is declared as a dbt **exposure** (📂 `models/marts/finance/_finance__exposures.yml`), with an explicit `depends_on` back to its source mart(s) and an `owner`. This closes the lineage graph past the warehouse boundary — `dbt docs generate` shows not just staging → marts, but marts → the dashboards actually consuming them, so a breaking change to a mart surfaces which dashboard it would affect before it ships.
-
-**[▶ View live on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)**
-
-**① Revenue** — Gross vs. recognized revenue by month, with automated Potential Cut-off Risk detection when `shipped_at` falls in a different fiscal period than `created_at`.
-![Revenue Dashboard](./images/tableau_dashboard_revenue.png)
-
-**② Order Reconciliation** — Master-to-subledger status at a glance, splitting genuine reconciliation failures from benign variance patterns (partial refunds, mixed shipments) so only true exceptions surface.
-![Order Reconciliation Dashboard](./images/tableau_dashboard_order_reconciliation.png)
-
-**③ Refund & Returns** — Refund rate trend, product return rate by category, and a fulfillment lead-time integrity check that flags `shipped_at` timestamps recorded earlier than `created_at` — a defect traced back to the raw source data, monitored via a warn-severity dbt test rather than silently patched.
-![Refund & Returns Dashboard](./images/tableau_dashboard_refund_returns.png)
-
-**④ Inventory** — LCM write-down and materiality-breach controls (both structurally clean), set against an Avg Days on Hand trend that's risen every year since FY2022 with no reversal — the real exposure is slow-moving stock, not mis-valued stock.
-![Inventory Dashboard](./images/tableau_dashboard_inventory.png)
-
----
-
-## 5. Getting Started
-
-**Prerequisites**: Docker Desktop, Python 3.9+, Google Cloud account (free tier — thelook_ecommerce is a public dataset)
-
-> **Note for reviewers**: `data/raw_*.parquet` (~4 MB, BigQuery source data) is included in this repository. **Steps 4–5 (BigQuery ingestion) can be skipped**. From Step 7, choose either manual execution or Airflow — `incr_*.parquet` files are excluded from git as they change daily.
-
-### Step 1 — Clone the repository
 ```bash
-git clone https://github.com/samshpark/audit_ready_dbt.git
-cd audit_ready_dbt
+git clone https://github.com/samshpark/audit_ready_dbt.git && cd audit_ready_dbt
+python3 -m venv venv && source venv/bin/activate && pip install dbt-duckdb pandas pyarrow
+python scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01
+dbt deps && dbt build        # needs a profiles.yml with a DuckDB `dev` target
+dbt docs generate && dbt docs serve
 ```
 
-### Step 2 — Create `profiles.yml`
-`profiles.yml` is excluded from git. Create it manually in the project root:
-```yaml
-audit_ready_dbt:
-  target: dev
-  outputs:
-    dev:
-      type: duckdb
-      path: dev.duckdb
-    prod:
-      type: bigquery
-      method: service-account
-      project: your-gcp-project-id
-      dataset: audit_ready_dbt
-      keyfile: credentials/google_creds.json
-      threads: 4
-      timeout_seconds: 300
-      location: US
-```
+Full setup — `profiles.yml`, BigQuery, Airflow, and AWS: [Getting Started](docs/getting_started.md).
 
-### Step 3 — Set up local Python environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install dbt-duckdb dbt-bigquery dbt-metricflow google-cloud-bigquery pandas pyarrow
-```
-> `dbt-bigquery` is only required if you intend to run against the BigQuery `prod` target.
+## More
 
-### Step 4 — Set up BigQuery credentials
-- Create a [Google Cloud service account](https://console.cloud.google.com/iam-admin/serviceaccounts) with **BigQuery Data Viewer** and **BigQuery Job User** roles
-- Download the JSON key and save it to `credentials/google_creds.json` (excluded from git)
-
-### Step 5 — Ingest data from BigQuery *(optional — raw_*.parquet already in repo)*
-```bash
-# Only needed if you want to re-pull fresh data from BigQuery
-python scripts/ingest_data.py
-```
-
-### Step 6 — Install dbt packages *(required)*
-```bash
-dbt deps
-```
-
-### Step 7 — Run the pipeline
-
-From Step 7 onwards, you can either run the pipeline **manually** or let **Airflow** handle it.
-
-#### Option A — Manual
-```bash
-python scripts/generate_daily_incremental.py --reset --backfill-from 2025-06-01  # initialize incr_*.parquet
-dbt seed                                       # load audit_materiality_thresholds
-dbt snapshot                                   # build scd_products price history
-dbt run                                        # execute all models
-dbt test                                       # validate all tests
-python scripts/export_for_tableau.py           # export mart tables to tableau_exports/*.csv
-```
-
-#### Option B — Airflow
-```bash
-# Builds the Docker image and starts Postgres, webserver, and scheduler
-docker-compose up -d
-
-# Wait ~30 seconds for containers to become healthy, then verify
-docker ps
-```
-Open **http://localhost:8080** and log in with `admin` / `admin`.
-Enable the `dbt_daily_incremental` DAG — it runs automatically at 09:00 UTC daily, or trigger it manually from the UI.
-
-The DAG handles `generate_daily_incremental.py → dbt seed → dbt snapshot → dbt run intermediate → dbt run marts → dbt test → export_for_tableau` on every run.
-
-#### Option C — AWS (Athena + journal-entry Lambda) *(optional)*
-Requires an AWS account and two IAM users: one for the pipeline (S3/Glue/Athena access plus `lambda:InvokeFunction` on the function) and one for deploys. Add an `athena` output to `profiles.yml`:
-```yaml
-    athena:
-      type: athena
-      aws_profile_name: <your-pipeline-profile>
-      region_name: us-east-1
-      s3_staging_dir: s3://<athena-bucket>/query-results/
-      s3_data_dir: s3://<athena-bucket>/tables/
-      database: awsdatacatalog
-      schema: audit_ready_dbt
-      work_group: primary
-      threads: 4
-```
-```bash
-python scripts/load_to_s3_athena.py          # publish sources to S3 + Glue
-dbt build --target athena                    # build and test every model on Athena
-cd lambdas && sam build && sam deploy        # deploy the journal-entry Lambda (see samconfig.toml)
-```
-Bucket names are defined in `scripts/load_to_s3_athena.py` and `lambdas/template.yaml` — change them to globally unique names for your account. The Airflow AWS branch and the parity DAG then work as-is; the parity DAG also expects a `parity_duckdb` DuckDB output (`path: parity.duckdb`) in `profiles.yml`.
-
-### Step 8 — Query metrics via Semantic Layer
-```bash
-# Validate semantic model definitions
-mf validate-configs
-```
-
-See [Semantic Layer — Example Queries](#10-semantic-layer-metricflow) above for `mf query` usage.
-
-### Step 9 — Browse dbt documentation *(optional)*
-```bash
-dbt docs generate
-dbt docs serve
-```
-Open **http://localhost:8080** to explore model metadata, column descriptions, data tests, and the full dependency graph.
+- [Architecture](docs/architecture.md) — ingestion, multi-warehouse setup, dbt layers and macros, Airflow, quality controls
+- [Accounting logic](docs/accounting_logic.md) — reconciliation, revenue recognition, refunds, inventory valuation, GL and exception pipeline
+- [Semantic layer](docs/semantic_layer.md) — MetricFlow models, metrics, and example queries
+- [Dashboards](docs/dashboards.md) — the four Tableau views
+- [Getting started](docs/getting_started.md) — full setup guide
+- Verification evidence: [BigQuery](docs/bigquery_prod_verification.md) · [Snowflake](docs/snowflake_prod_verification.md) · [Athena](docs/athena_prod_verification.md) · [Cross-warehouse parity](docs/cross_warehouse_parity.md) · [GL pipeline](docs/je_pipeline_verification.md)
