@@ -128,7 +128,7 @@ def run(athena_client, start: date, end: date, as_of: datetime) -> dict[str, str
 
     entries = data["journal_entries"]
     period_start = datetime.combine(start, datetime.min.time())
-    exceptions = rules.run_all(data, period_start, as_of)
+    exceptions = rules.run_all(data, period_start)
 
     summary = {
         "period_start": start.isoformat(),
