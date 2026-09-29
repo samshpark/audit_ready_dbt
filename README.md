@@ -12,9 +12,6 @@ A financial data pipeline built by a **CPA (Big 4, Accounting Advisory Manager)*
 ![AWS](https://img.shields.io/badge/AWS-Athena%20%7C%20Lambda%20%7C%20S3-232F3E?logo=amazonwebservices&logoColor=white)
 ![Iceberg](https://img.shields.io/badge/Apache%20Iceberg-4E8EE9?logo=apache&logoColor=white)
 ![Airflow](https://img.shields.io/badge/Airflow-017CEE?logo=apacheairflow&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
-![pandas](https://img.shields.io/badge/pandas-150458?logo=pandas&logoColor=white)
 ![Tableau](https://img.shields.io/badge/Tableau-E97627?logo=tableau&logoColor=white)
 
 **[▶ Live dashboards on Tableau Public](https://public.tableau.com/app/profile/sam.park8167/viz/audit_ready_dbt_dashboard/Revenue)**
@@ -26,8 +23,9 @@ flowchart LR
     TL["TheLook<br/>(BigQuery public data)"] -->|ingest_data.py| PQ[("Parquet<br/>raw + incremental")]
     GEN["Synthetic order<br/>generator"] --> PQ
     PQ --> DUCK["dbt on DuckDB<br/>(local dev)"]
-    PQ -->|"S3 + Glue"| ATH["dbt on Athena<br/>(production)"]
-    PQ --> BQ["dbt on BigQuery<br/>/ Snowflake"]
+    PQ -->|"S3 + Glue"| ATH["dbt on Athena<br/>(cloud target)"]
+    PQ --> BQ["dbt on BigQuery"]
+    PQ -.-> SF["dbt on Snowflake<br/>(verified once)"]
     DUCK -->|CSV exports| TAB["Tableau Public"]
     ATH --> LAM["Lambda<br/>JE export + exceptions"]
     LAM --> RPT[("S3 reports<br/>versioned")]
@@ -45,7 +43,7 @@ Airflow orchestrates generation, the DuckDB and Athena builds, and the Lambda ca
 ## Key Design Decisions
 
 1. **dbt owns the accounting; the GL is derived, never re-derived.** `journal_entries` posts revenue, returns, and COGS from the marts that own each recognition rule. Tests enforce debit = credit and tie posted totals back to independently built marts on every build.
-2. **Portable SQL, proven to the cent.** The same models build on DuckDB, BigQuery, Snowflake, and AWS Athena through dbt's cross-database macros. A weekly Airflow DAG rebuilds three warehouses from identical sources and compares ten GL and mart totals; its first run caught two DuckDB-only defects the test suites had missed.
+2. **Portable SQL, proven to the cent.** The same models build on DuckDB, BigQuery, Snowflake, and AWS Athena through dbt's cross-database macros, with Iceberg tables so incremental merges work on Athena. A weekly Airflow DAG rebuilds three warehouses from identical sources and compares ten GL and mart totals; its first run caught two DuckDB-only defects the test suites had missed.
 3. **Preventive over detective controls.** An error-severity test fails the build on any future-dated shipment or return, so nothing is posted — added after the exception pipeline caught revenue being recognized ahead of shipment.
 4. **Local-first, incremental, CI-gated.** DuckDB keeps development cost near zero; incremental marts merge with a 14-day lookback plus a Sunday full refresh. 199 data tests — seven of them singular tests for accounting controls such as sub-ledger reconciliation, revenue recognition, and double-entry balance — run on every build, and Slim CI builds and tests only changed models.
 5. **AWS as the integration layer.** A SAM-deployed Lambda exports each day's entries and exceptions to a versioned S3 bucket — a point-in-time record the marts can't provide — with least-privilege IAM and separate deploy and run users.

@@ -17,7 +17,7 @@ A portfolio project built by a **CPA (Big 4, Accounting Advisory Manager)** appl
 * **Idempotency**: Designed models to be idempotent, ensuring that re-running the pipeline produces consistent financial results without duplication.
 
 ## Hybrid Data Architecture
-I adopted a hybrid architecture to balance development efficiency with production scalability.
+I adopted a hybrid architecture to balance development efficiency with portability to cloud warehouses.
 
 ### 1. Ingestion & Synthetic Data Generation
 * **Python Extraction** (📂 `scripts/ingest_data.py`): Extracts BigQuery raw data into local **Parquet** (`raw_*.parquet`) files via API.
@@ -144,7 +144,7 @@ LEFT JOIN {{ ref('scd_products') }} scd
 ### 4. Orchestration (Apache Airflow + Docker)
 * **File**: 📂 `dags/dbt_incremental_pipeline.py`
 * **Schedule**: Daily at 09:00 UTC, containerized via `docker-compose.yml`
-* **Pipeline**: after step 1 the DAG forks into a local **DuckDB branch** (feeds the Tableau exports) and an **AWS branch** (the production Athena warehouse and the journal-entry export).
+* **Pipeline**: after step 1 the DAG forks into a local **DuckDB branch** (feeds the Tableau exports) and an **AWS branch** (the Athena cloud target and the journal-entry export).
     1. `generate_incremental_data` — Creates the business date's (`ds`) synthetic orders in `incr_*.parquet` — separate from the immutable BigQuery-sourced `raw_*.parquet` — and advances every synthetic order's lifecycle to the current time
     2. `dbt_source_freshness` — Checks `incr_orders` / `incr_order_items` freshness (warn after 30h, error after 54h, sized to the daily cadence). Placed right after the step that just wrote today's data, so it always passes when the DAG runs at all — it demonstrates the mechanism rather than catching a real failure mode, since the one failure that matters here (the host machine being off) leaves nothing running to report it. See the task's `doc_md` for the full caveat.
     3. `dbt_seed` — Reloads the `audit_materiality_thresholds`, `chart_of_accounts`, and `journal_entry_rules` lookup tables so threshold or posting-rule changes take effect without manual intervention

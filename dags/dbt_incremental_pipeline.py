@@ -3,7 +3,7 @@ DAG: dbt_daily_incremental
 Schedule: 09:00 UTC daily
 
 Pipeline — after step 1 the DAG forks into a local DuckDB branch (feeds the Tableau
-exports) and an AWS branch (the production Athena warehouse and the journal-entry export):
+exports) and an AWS branch (the Athena cloud target and the journal-entry export):
 
   1. generate_incremental_data  — create the business date's (`ds`) synthetic orders and advance
                                   every synthetic order's lifecycle to the current time
