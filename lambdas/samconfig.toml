@@ -1,0 +1,19 @@
+# Deploy from lambdas/:  sam build && sam deploy
+# Uses the audit-ready-deployer profile (deploy rights only); the daily Airflow
+# pipeline's dbt-athena credentials can invoke the function but not change it.
+version = 0.1
+
+[default.global.parameters]
+stack_name = "audit-ready-je-pipeline"
+region = "us-east-1"
+profile = "audit-ready-deployer"
+
+[default.build.parameters]
+use_container = true
+
+[default.deploy.parameters]
+s3_bucket = "audit-ready-dbt-athena-sam2026"
+s3_prefix = "sam-artifacts"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
