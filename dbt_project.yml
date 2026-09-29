@@ -22,6 +22,9 @@ clean-targets: # directories to be removed by `dbt clean`
   - "target"
   - "dbt_packages"
 
+on-run-start:
+  - "{{ set_utc_session_timezone() }}"
+
 models:
   audit_ready_dbt:
     # Athena-only: Hive tables cannot be merged into, so the incremental marts
