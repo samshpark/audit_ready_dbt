@@ -34,3 +34,55 @@ seeds:
         tests:
           - not_null
 
+
+  - name: chart_of_accounts
+    description: >
+      General-ledger accounts used by journal_entries, with account type and normal
+      balance so postings can be reviewed against expected sign conventions.
+    columns:
+      - name: account_code
+        description: "GL account number. Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: account_name
+        tests:
+          - not_null
+      - name: account_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Asset', 'Liability', 'Equity', 'Revenue', 'Contra-Revenue', 'Expense']
+      - name: normal_balance
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Debit', 'Credit']
+
+  - name: journal_entry_rules
+    description: >
+      Posting rules: the debit and credit account for each entry type. Kept as a seed so
+      accounting policy (e.g. account mapping) changes are reviewed as data, not SQL.
+    columns:
+      - name: entry_type
+        description: "REV / RET / COGS. Primary key."
+        tests:
+          - unique
+          - not_null
+      - name: debit_account
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('chart_of_accounts')
+                field: account_code
+      - name: credit_account
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('chart_of_accounts')
+                field: account_code
+      - name: description
+        tests:
+          - not_null

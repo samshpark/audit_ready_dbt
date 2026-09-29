@@ -1,0 +1,4 @@
+entry_type,debit_account,credit_account,description
+REV,1200,4000,Revenue recognized on shipment (ASC 606 control transfer - FOB shipping point)
+RET,4100,1200,Customer returns refunded
+COGS,5000,1300,Cost of goods shipped (specific identification)
