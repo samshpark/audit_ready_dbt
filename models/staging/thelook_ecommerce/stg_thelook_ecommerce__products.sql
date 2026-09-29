@@ -4,8 +4,8 @@ with source as (
 
 renamed as (
     select
-        cast(id as string) as product_id,
-        cast(distribution_center_id as string) as distribution_center_id,
+        cast(id as {{ dbt.type_string() }}) as product_id,
+        cast(distribution_center_id as {{ dbt.type_string() }}) as distribution_center_id,
         lower(category) as category,
         name,
         brand,

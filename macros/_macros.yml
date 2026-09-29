@@ -47,8 +47,9 @@ macros:
     description: >
       Concatenates a column's distinct values in order. DuckDB and BigQuery both support
       string_agg(distinct col order by col), but Snowflake has no equivalent syntax -- it
-      requires listagg(distinct col, sep) within group (order by col) instead. Dispatches
-      on target.type to render the correct form for each adapter.
+      requires listagg(distinct col, sep) within group (order by col) instead, and Athena
+      (Trino) has neither -- it uses array_join(array_sort(array_distinct(array_agg(col))), sep).
+      Dispatches on target.type to render the correct form for each adapter.
       Used in int_order_items_aggregated to build order_item_status_list.
     arguments:
       - name: column_name
