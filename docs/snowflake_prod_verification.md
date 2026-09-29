@@ -63,12 +63,3 @@ except the one warn noted above.
 | stg_thelook_ecommerce__users | model | success | 0.28 |
 | stg_thelook_ecommerce__inventory_items | model | success | 0.24 |
 | stg_thelook_ecommerce__order_items | model | success | 0.21 |
-
-## Re-run on 2026-09-29 (journal-entry models)
-
-The new `assert_no_future_dated_events` test failed with 11,081 rows. Sources
-and views were clean; the bad timestamps (e.g. year −32764) were stored in the
-`order_item_revenue` incremental table by an earlier build and never rewritten
-outside the 14-day lookback. A `--full-refresh` fixed it: **225 pass / 1
-expected warn / 0 errors**. Snowflake still holds the pre-fix synthetic data,
-so it is excluded from the parity check.
