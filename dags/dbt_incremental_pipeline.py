@@ -271,8 +271,8 @@ with DAG(
         python_callable=run_je_pipeline,
         doc_md=(
             "Invoke the je_pipeline Lambda for the run's business date (`ds`). It exports the "
-            "day's journal_entries as a GL upload CSV with order/item-level support, re-checks "
-            "debit = credit at the boundary, runs the exception rules, and writes everything to S3."
+            "day's journal_entries as a GL upload CSV with order/item-level support, runs the "
+            "exception rules, and writes everything to S3."
         ),
     )
 
